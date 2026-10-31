@@ -5,12 +5,8 @@ import customtkinter as ctk
 
 from gui import theme as T
 from gui.start_view import StartView
-
-
-def resource_path(rel):
-    """Ścieżka do pliku w projekcie lub wewnątrz .exe (PyInstaller rozpakowuje do _MEIPASS)."""
-    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return os.path.join(base, rel)
+from utils.files import resource_path
+from utils.version import VERSION
 
 
 def set_crisp_icon(window, ico_path):
@@ -43,7 +39,7 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
         super().__init__(fg_color=T.BG)
-        self.title("MX Sync")
+        self.title(f"MX Sync  v{VERSION}")
         self.geometry("960x680")
         self.minsize(800, 560)
         icon = resource_path(os.path.join("assets", "icon.ico"))
@@ -51,6 +47,7 @@ class App(ctk.CTk):
             self.iconbitmap(icon)
             self.after(300, lambda: set_crisp_icon(self, icon))
         self._view = None
+        self.update_info = None      # wynik cichego sprawdzenia aktualizacji przy starcie
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.show(StartView)
 
@@ -61,7 +58,15 @@ class App(ctk.CTk):
         self._view = cls(self, **kw)
         self._view.pack(fill="both", expand=True)
 
+    def open_updates(self, info=None):
+        from gui.update_dialog import UpdateDialog
+        UpdateDialog(self, info)
+
+    def quit_app(self):
+        self._on_close()
+
     def _on_close(self):
         if self._view:
             self._view.cleanup()
+            self._view = None
         self.destroy()

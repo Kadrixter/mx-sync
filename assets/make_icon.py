@@ -1,15 +1,17 @@
-"""Generuje assets/icon.ico (bez zewnętrznych bibliotek).
+"""Generuje assets/icon.ico i assets/wheel.png (bez zewnętrznych bibliotek).
 
-Wzór jak ekran startowy: zaokrąglony kwadrat przecięty ukośnie –
-lewa strona fioletowa ze strzałką w dół (klient), prawa niebieska
-ze strzałką w górę (host). Uruchom: python assets/make_icon.py [podgląd.png]
+Wzór: koło motocrossowe – opona z kostkami (terenowy bieżnik), srebrna obręcz,
+szprychy i piasta. Ikona ma pomarańczowe tło (zaokrąglony kwadrat), logo
+wheel.png jest przezroczyste. Uruchom: python assets/make_icon.py [podgląd.png]
 """
+import math
 import os
 import struct
 import sys
 import zlib
 
 SIZES = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
+LOGO_SIZE = 160
 SS = 4  # próbek na oś piksela (antyaliasing)
 
 
@@ -21,13 +23,18 @@ def lerp(a, b, t):
     return tuple(x + (y - x) * t for x, y in zip(a, b))
 
 
-PURPLE_TOP, PURPLE_BOT = hex_rgb("#a855f7"), hex_rgb("#6d28d9")
-BLUE_TOP, BLUE_BOT = hex_rgb("#60a5fa"), hex_rgb("#2563eb")
-WHITE = (255, 255, 255)
+BG_TOP, BG_BOT = hex_rgb("#ff8a2a"), hex_rgb("#d94400")
+TIRE = hex_rgb("#141518")
+TIRE_EDGE = hex_rgb("#2a2c31")
+RIM = hex_rgb("#d4d7dd")
+RIM_DARK = hex_rgb("#8d929b")
+SPOKE = hex_rgb("#1d1e22")
+SPOKE_LOGO = hex_rgb("#b9bdc5")
+HUB = hex_rgb("#1b1c20")
+HUB_CAP = hex_rgb("#ff6b1a")
 
-
-def line_x(y):
-    return 0.62 - 0.24 * y
+KNOBS = 24
+SPOKES = 16
 
 
 def in_rounded_square(x, y, m=0.03, r=0.22):
@@ -38,31 +45,54 @@ def in_rounded_square(x, y, m=0.03, r=0.22):
     return (x - cx) ** 2 + (y - cy) ** 2 <= r * r
 
 
-def in_arrow(x, y, cx, down):
-    if not down:
-        y = 1 - y  # strzałka w górę = odbita strzałka w dół
-    if abs(x - cx) <= 0.055 and 0.25 <= y <= 0.55:
-        return True
-    return 0.48 <= y <= 0.74 and abs(x - cx) <= 0.16 * (0.74 - y) / 0.26
+def wheel(x, y, logo):
+    """Kolor koła w punkcie albo None (poza kołem / prześwit między szprychami)."""
+    dx, dy = x - 0.5, y - 0.5
+    r = math.hypot(dx, dy)
+    a = math.atan2(dy, dx)
+    scale = 1.06 if logo else 1.0          # logo bez tła – koło trochę większe
+    r /= scale
+    if r > 0.46:
+        return None
+    if r >= 0.41:                          # kostki bieżnika (dwa rzędy na przemian)
+        k = (a / (2 * math.pi) * KNOBS) % 2.0
+        row = 0 if k < 1 else 1
+        k %= 1.0
+        top = 0.46 if row == 0 else 0.445
+        if 0.12 < k < 0.70 and r < top:
+            return TIRE_EDGE if r > top - 0.012 else TIRE
+        return None
+    if r >= 0.30:                          # opona
+        return lerp(TIRE, TIRE_EDGE, max(0.0, (r - 0.37) / 0.035)) if r > 0.37 else TIRE
+    if r >= 0.262:                         # obręcz z cieniem od środka
+        return lerp(RIM_DARK, RIM, min(1.0, (r - 0.262) / 0.02))
+    if r < 0.034:
+        return HUB_CAP
+    if r < 0.078:                          # piasta
+        return HUB
+    # szprychy – lekko styczne do piasty, jak w prawdziwym kole
+    for i in range(SPOKES):
+        base = 2 * math.pi * i / SPOKES
+        off = 0.05 if i % 2 else -0.05     # krzyżowanie szprych
+        ang = base + off * (0.262 - r) / 0.184 * 1.6
+        d = abs((a - ang + math.pi) % (2 * math.pi) - math.pi) * r
+        if d < 0.0105:
+            return SPOKE_LOGO if logo else SPOKE
+    return None
 
 
-def sample(x, y):
+def sample_icon(x, y):
     if not in_rounded_square(x, y):
         return None
-    lx = line_x(y)
-    if in_arrow(x, y, 0.27, True) and x < lx - 0.04 or in_arrow(x, y, 0.73, False) and x > lx + 0.04:
-        return WHITE
-    # odległość od przekątnej (wektor normalny linii x = 0.62 - 0.24y)
-    d = abs(x - lx) / (1 + 0.24 ** 2) ** 0.5
-    if d < 0.016:
-        return WHITE
-    if d < 0.045:  # poświata wokół linii
-        base = lerp(PURPLE_TOP, PURPLE_BOT, y) if x < lx else lerp(BLUE_TOP, BLUE_BOT, y)
-        return lerp(base, WHITE, 0.35 * (1 - (d - 0.016) / 0.029))
-    return lerp(PURPLE_TOP, PURPLE_BOT, y) if x < lx else lerp(BLUE_TOP, BLUE_BOT, y)
+    c = wheel(x, y, False)
+    return c if c else lerp(BG_TOP, BG_BOT, y)
 
 
-def render(size):
+def sample_logo(x, y):
+    return wheel(x, y, True)
+
+
+def render(size, fn):
     rows = []
     n = SS * SS
     for py in range(size):
@@ -71,7 +101,7 @@ def render(size):
             r = g = b = a = 0
             for sy in range(SS):
                 for sx in range(SS):
-                    c = sample((px + (sx + 0.5) / SS) / size, (py + (sy + 0.5) / SS) / size)
+                    c = fn((px + (sx + 0.5) / SS) / size, (py + (sy + 0.5) / SS) / size)
                     if c:
                         r += c[0]; g += c[1]; b += c[2]; a += 1
             if a:
@@ -102,7 +132,8 @@ def bmp(size, rows):
 
 
 def main():
-    rendered = [(s, render(s)) for s in SIZES]
+    here = os.path.dirname(os.path.abspath(__file__))
+    rendered = [(s, render(s, sample_icon)) for s in SIZES]
     # 256 px jako PNG (standard Windows), mniejsze jako BMP
     images = [(s, png(s, r) if s == 256 else bmp(s, r)) for s, r in rendered]
     header = struct.pack("<HHH", 0, 1, len(images))
@@ -111,10 +142,11 @@ def main():
     for s, img in images:
         entries += struct.pack("<BBBBHHII", s % 256, s % 256, 0, 0, 1, 32, len(img), offset + len(data))
         data += img
-    out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
-    with open(out, "wb") as f:
+    with open(os.path.join(here, "icon.ico"), "wb") as f:
         f.write(header + entries + data)
-    print("Zapisano", out)
+    with open(os.path.join(here, "wheel.png"), "wb") as f:
+        f.write(png(LOGO_SIZE, render(LOGO_SIZE, sample_logo)))
+    print("Zapisano icon.ico i wheel.png w", here)
     if len(sys.argv) > 1:
         with open(sys.argv[1], "wb") as f:
             f.write(png(256, rendered[-1][1]))

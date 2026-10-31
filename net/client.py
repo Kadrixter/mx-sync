@@ -2,6 +2,8 @@
 
 Sprawdzanie: najpierw indeks hosta, potem MD5 liczone TYLKO dla plików o zgodnym
 rozmiarze (brakujące / inny rozmiar od razu idą do pobrania), z cache hashy.
+Pliki z indeksu są grupowane w mody (mapa, motor, kask…) – klient widzi, które mody
+hosta ma aktualne, a których brakuje, i pobiera tylko wybrane.
 Pobieranie: plik .part, wznawianie (Range), ponawianie z odczekaniem, MD5 w locie.
 """
 import hashlib
@@ -122,6 +124,53 @@ class HostConnection:
         threading.Thread(target=bye, daemon=True).start()
 
 
+# foldery-kategorie MX Bikes – mod to pierwszy element ścieżki, który nie jest kategorią
+CATEGORY_DIRS = {
+    "mods", "tracks", "bikes", "rider", "riders", "tyres", "misc", "motocross", "supercross",
+    "enduro", "supermoto", "arenacross", "freestyle", "paints", "helmets", "boots", "gloves",
+    "goggles", "protections", "neckbraces", "bodies", "models", "sounds", "skins", "gear",
+}
+CATEGORY_LABELS = {"tracks": "Mapa", "bikes": "Motor", "rider": "Rider", "riders": "Rider",
+                   "tyres": "Opony", "misc": "Inne"}
+
+
+def mod_key(rel):
+    """'tracks/motocross/Foo.pkz' -> 'tracks/motocross/Foo.pkz',
+    'tracks/motocross/Foo/terrain/a.hrc' -> 'tracks/motocross/Foo'."""
+    parts = [p for p in rel.replace("\\", "/").split("/") if p]
+    for i, p in enumerate(parts):
+        if p.lower() not in CATEGORY_DIRS or i == len(parts) - 1:
+            return "/".join(parts[:i + 1])
+    return "/".join(parts)
+
+
+class ModGroup:
+    """Jeden mod hosta (mapa, motor…) i stan jego plików u klienta."""
+
+    def __init__(self, key):
+        self.key = key
+        parts = key.split("/")
+        self.name = parts[-1]
+        self.path = "/".join(parts[:-1])
+        cat = parts[0].lower() if len(parts) > 1 else ""
+        self.kind = CATEGORY_LABELS.get(cat, "Mod")
+        self.files = 0
+        self.size = 0
+        self.todo = []           # FileItem do pobrania
+
+    @property
+    def todo_size(self):
+        return sum(f.size for f in self.todo)
+
+    @property
+    def status(self):
+        if not self.todo:
+            return "aktualny"
+        if len(self.todo) == self.files and all(f.reason == "brakuje" for f in self.todo):
+            return "brakuje"
+        return "nieaktualny"
+
+
 class FileItem:
     __slots__ = ("rel", "name", "size", "hash", "reason", "status", "done")
 
@@ -151,6 +200,7 @@ class CheckJob(threading.Thread):
         self.meter = SpeedMeter()
         self.index = {}
         self.todo = []
+        self.mods = []               # ModGroup – wszystkie mody hosta
         self.ok_count = 0
         self.error = None
         self.cancelled = False
@@ -260,6 +310,23 @@ class CheckJob(threading.Thread):
         todo.sort(key=lambda f: f.name.lower())
         self.todo = todo
         self.ok_count = len(self.index) - len(todo)
+        self.mods = group_mods(self.index, todo)
+
+
+def group_mods(index, todo):
+    """Grupuje indeks hosta w mody; najpierw te do pobrania, potem aktualne."""
+    groups = {}
+    for rel, info in index.items():
+        k = mod_key(rel)
+        g = groups.get(k)
+        if g is None:
+            g = groups[k] = ModGroup(k)
+        g.files += 1
+        g.size += int(info["size"])
+    for f in todo:
+        groups[mod_key(f.rel)].todo.append(f)
+    order = {"brakuje": 0, "nieaktualny": 1, "aktualny": 2}
+    return sorted(groups.values(), key=lambda g: (order[g.status], g.kind, g.name.lower()))
 
 
 class DownloadJob(threading.Thread):

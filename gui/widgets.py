@@ -118,39 +118,49 @@ class SelectableList(ctk.CTkScrollableFrame):
 
     # ----- elementy -----
 
-    def add(self, key, name, is_dir, size=None, checked=False, badge=None):
+    def add(self, key, name, is_dir, size=None, checked=False, badge=None, icon=None,
+            badge_color=None, enabled=True, sub=None):
         if key in self._rows:
             return
         self._empty.pack_forget()
         row = ctk.CTkFrame(self, fg_color=T.ROW, corner_radius=8)
         row.pack(fill="x", padx=6, pady=3)
-        var = tk.BooleanVar(value=checked)
+        var = tk.BooleanVar(value=checked and enabled)
         cb = None
         if self.checkable:
             cb = ctk.CTkCheckBox(row, text="", width=22, checkbox_width=20, checkbox_height=20,
                                  variable=var, onvalue=True, offvalue=False,
                                  command=self._changed, fg_color=T.ACCENT,
-                                 hover_color=T.ACCENT_HOVER, border_color=T.MUTED)
+                                 hover_color=T.ACCENT_HOVER, border_color=T.MUTED,
+                                 checkmark_color="#111111",
+                                 state="normal" if enabled else "disabled")
             cb.pack(side="left", padx=(10, 2), pady=7)
-        icon = ctk.CTkLabel(row, text="📁" if is_dir else "📄", width=24, font=T.font(14),
-                            text_color=T.YELLOW if is_dir else T.MUTED)
-        icon.pack(side="left", padx=(8 if not cb else 2, 4), pady=7)
-        name_lbl = ctk.CTkLabel(row, text=T.shorten(name, 80), anchor="w", font=T.font(13),
-                                text_color=T.TEXT)
-        name_lbl.pack(side="left", fill="x", expand=True)
+        icon_lbl = ctk.CTkLabel(row, text=icon or ("📁" if is_dir else "📄"), width=24, font=T.font(14),
+                                text_color=T.ACCENT if is_dir else T.MUTED)
+        icon_lbl.pack(side="left", padx=(8 if not cb else 2, 4), pady=7)
+        name_lbl = ctk.CTkLabel(row, text=T.shorten(name, 60 if sub else 80), anchor="w",
+                                font=T.font(13, "bold" if sub else "normal"),
+                                text_color=T.TEXT if enabled else T.MUTED)
+        name_lbl.pack(side="left")
+        widgets = [row, icon_lbl, name_lbl]
+        if sub:
+            sub_lbl = ctk.CTkLabel(row, text=T.shorten(sub, 50), anchor="w", font=T.font(11),
+                                   text_color=T.MUTED)
+            sub_lbl.pack(side="left", padx=(8, 0))
+            widgets.append(sub_lbl)
         size_lbl = ctk.CTkLabel(row, text=fmt_size(size), width=95, anchor="e",
                                 font=T.font(12), text_color=T.MUTED)
         size_lbl.pack(side="right", padx=(6, 14))
-        widgets = [row, icon, name_lbl, size_lbl]
+        widgets.append(size_lbl)
         if badge:
-            b = ctk.CTkLabel(row, text=badge, font=T.font(11), text_color=T.ORANGE)
+            b = ctk.CTkLabel(row, text=badge, font=T.font(11, "bold"), text_color=badge_color or T.ORANGE)
             b.pack(side="right", padx=4)
             widgets.append(b)
-        if cb:
+        if cb and enabled:
             for w in widgets:
                 w.bind("<Button-1>", lambda e, c=cb: c.toggle())
         self._rows[key] = {"frame": row, "var": var, "size": size, "size_lbl": size_lbl,
-                           "is_dir": is_dir, "name": name}
+                           "is_dir": is_dir, "name": name, "enabled": enabled}
 
     def autosize(self, key, path):
         if self._worker is None:
@@ -193,7 +203,7 @@ class SelectableList(ctk.CTkScrollableFrame):
 
     def set_all(self, value):
         for r in self._rows.values():
-            r["var"].set(value)
+            r["var"].set(value and r.get("enabled", True))
         self._changed()
 
     def _changed(self):

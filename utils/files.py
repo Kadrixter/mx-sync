@@ -1,6 +1,13 @@
 """Operacje na plikach: folder modów, listowanie, rozmiary, bezpieczne ścieżki."""
 import os
+import sys
 from pathlib import Path
+
+
+def resource_path(rel):
+    """Ścieżka do pliku w projekcie lub wewnątrz .exe (PyInstaller rozpakowuje do _MEIPASS)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, rel)
 
 
 def find_mx_mods_folder():

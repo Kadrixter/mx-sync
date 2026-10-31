@@ -1,31 +1,54 @@
-"""Kolory i drobne helpery wyglądu (ciemny motyw)."""
+"""Kolory i drobne helpery wyglądu – motyw w stylu MX Bikes (błoto, czerń, pomarańcz)."""
+import tkinter.font as tkfont
+
 import customtkinter as ctk
 
-BG = "#111317"
-PANEL = "#181b21"
-ROW = "#1f232b"
-ROW_HOVER = "#2a2f3a"
-TRACK = "#2a2f3a"
-ACCENT = "#4f8cff"
-ACCENT_HOVER = "#3b72e0"
-ACCENT2 = "#a855f7"
-TEXT = "#e8eaf0"
-MUTED = "#8b92a3"
-GREEN = "#34d399"
-RED = "#f87171"
-YELLOW = "#fbbf24"
-ORANGE = "#fb923c"
+BG = "#0d0e10"
+PANEL = "#16181c"
+ROW = "#1f2126"
+ROW_HOVER = "#2b2e35"
+TRACK = "#2b2e35"
+ACCENT = "#ff6b1a"          # pomarańcz jak plastiki crossa
+ACCENT_HOVER = "#e2550a"
+ACCENT2 = "#ffc21a"         # żółta tablica startowa
+TEXT = "#f1f1f1"
+MUTED = "#8f939c"
+GREEN = "#3ddc84"
+RED = "#ff5a5a"
+YELLOW = "#ffd23f"
+ORANGE = "#ff9a4a"
+CYAN = "#38bdf8"            # Radmin VPN
 
 _KINDS = {
-    "primary": (ACCENT, ACCENT_HOVER, "#ffffff"),
+    "primary": (ACCENT, ACCENT_HOVER, "#111111"),
     "secondary": (ROW, ROW_HOVER, TEXT),
     "danger": ("#b4383f", "#952d33", "#ffffff"),
     "success": ("#1f9d6b", "#178257", "#ffffff"),
 }
 
 
+_title_family = None
+
+
+def title_family():
+    """Bahnschrift (Windows 10+) – wąski, „wyścigowy” krój; inaczej Segoe UI."""
+    global _title_family
+    if _title_family is None:
+        try:
+            fams = set(tkfont.families())
+        except Exception:
+            fams = set()
+        _title_family = next((f for f in ("Bahnschrift SemiBold", "Bahnschrift") if f in fams), "Segoe UI")
+    return _title_family
+
+
 def font(size=13, weight="normal"):
     return ctk.CTkFont(family="Segoe UI", size=size, weight=weight)
+
+
+def title_font(size=22):
+    fam = title_family()
+    return ctk.CTkFont(family=fam, size=size, weight="normal" if "SemiBold" in fam else "bold")
 
 
 def button(master, text, command=None, kind="secondary", **kw):

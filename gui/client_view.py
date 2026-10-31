@@ -20,12 +20,16 @@ from utils.hashing import HashCache
 from utils.netinfo import is_radmin_ip, radmin_available
 
 MAX_FILE_ROWS = 300
+MAX_MOD_ROWS = 400
+KIND_ICONS = {"Mapa": "🏁", "Motor": "🏍", "Rider": "🪖", "Opony": "◎", "Inne": "📦", "Mod": "📦"}
+STATUS_BADGES = {"brakuje": ("BRAKUJE", T.ORANGE), "nieaktualny": ("NIEAKTUALNY", T.YELLOW),
+                 "aktualny": ("✔ AKTUALNY", T.GREEN)}
 
 
 def _badges(master, host):
     if host.get("radmin"):
         ctk.CTkLabel(master, text="[Radmin VPN host]", font=T.font(12, "bold"),
-                     text_color=T.ORANGE).pack(side="left", padx=6)
+                     text_color=T.CYAN).pack(side="left", padx=6)
     if host.get("protected"):
         ctk.CTkLabel(master, text="[🔒 z hasłem]", font=T.font(12, "bold"),
                      text_color=T.YELLOW).pack(side="left", padx=6)
@@ -47,7 +51,7 @@ class ClientServersView(View):
         rad = radmin_available()
         ctk.CTkLabel(top, text="Radmin VPN: wykryto – szukam też w sieci Radmin" if rad
                      else "Radmin VPN: nie wykryto", font=T.font(12),
-                     text_color=T.ORANGE if rad else T.MUTED).pack(side="right")
+                     text_color=T.CYAN if rad else T.MUTED).pack(side="right")
 
         self.box = ctk.CTkScrollableFrame(self, fg_color=T.PANEL, corner_radius=10)
         self.box.pack(fill="both", expand=True, padx=20, pady=8)
@@ -186,7 +190,9 @@ class ClientSyncView(View):
         folder = cfg.get("client_folder") or find_mx_mods_folder()
         self.folder = folder if folder and os.path.isdir(folder) else None
         self.job = None
-        self.todo = {}
+        self.mods = []               # ModGroup z ostatniego sprawdzenia
+        self.sel = set()             # klucze zaznaczonych modów
+        self.show_all = False
         self._poll_job = None
 
         bar = self.header(f"Mody hosta „{host['name']}”", f"{host['ip']}:{host['port']}", back=self._back)
@@ -221,6 +227,13 @@ class ClientSyncView(View):
         self.stats_lbl = ctk.CTkLabel(card, text="", font=T.font(12), text_color=T.MUTED, anchor="w")
         self.stats_lbl.pack(fill="x", padx=16, pady=(0, 12))
 
+        self.filter = ctk.CTkSegmentedButton(self, values=["Do pobrania", "Wszystkie mody hosta"],
+                                             command=self._set_filter, font=T.font(12, "bold"),
+                                             selected_color=T.ACCENT, selected_hover_color=T.ACCENT_HOVER,
+                                             unselected_color=T.ROW, unselected_hover_color=T.ROW_HOVER,
+                                             fg_color=T.PANEL, text_color=T.TEXT, height=30)
+        self.filter.set("Do pobrania")
+
         self.list_holder = ctk.CTkFrame(self, fg_color="transparent")
         self.list_holder.pack(fill="both", expand=True, padx=20, pady=4)
         self.list = None
@@ -231,7 +244,7 @@ class ClientSyncView(View):
         foot.pack(fill="x", padx=20, pady=(6, 16))
         self.summary = ctk.CTkLabel(foot, text="", font=T.font(13), text_color=T.TEXT)
         self.summary.pack(side="left", padx=14, pady=12)
-        self.dl_btn = T.button(foot, "⬇  Pobierz wszystko", self._download, kind="primary", width=190, height=40)
+        self.dl_btn = T.button(foot, "⬇  Pobierz zaznaczone", self._download, kind="primary", width=210, height=40)
         self.check_btn = T.button(foot, "⟳ Sprawdź ponownie", self._start_check, width=160, height=40)
         self.check_btn.pack(side="right", padx=(4, 12), pady=10)
         self.sel_btn = T.button(foot, "Zaznacz wszystko", self._toggle_all, width=130, height=40)
@@ -272,11 +285,11 @@ class ClientSyncView(View):
         except ValueError:
             return 3
 
-    # ----- lista plików do pobrania -----
+    # ----- lista modów hosta -----
 
     def _new_list(self, checkable, empty_text):
         if self.list is None:
-            self.list = SelectableList(self.list_holder, on_change=self._update)
+            self.list = SelectableList(self.list_holder, on_change=self._list_changed)
             self.list.pack(fill="both", expand=True)
         if self._more_lbl:
             self._more_lbl.destroy()
@@ -284,32 +297,77 @@ class ClientSyncView(View):
         self.list.clear(empty_text)
         self.list.checkable = checkable
 
+    def _needed(self):
+        return [g for g in self.mods if g.todo]
+
+    def _set_filter(self, value):
+        self.show_all = value != "Do pobrania"
+        self._fill_list()
+
+    def _fill_list(self):
+        mods = self.mods if self.show_all else self._needed()
+        self._new_list(True, "Nie ma nic do pobrania 🎉" if not self.show_all else "Host nic nie udostępnia")
+        for g in mods[:MAX_MOD_ROWS]:
+            badge, color = STATUS_BADGES[g.status]
+            if g.status == "nieaktualny":
+                badge += f" · {plural_files(len(g.todo))} z {g.files}"
+            sub = g.kind + (f"  •  {g.path}" if g.path else "")
+            self.list.add(g.key, g.name, True, size=g.todo_size if g.todo else g.size,
+                          checked=g.key in self.sel, badge=badge, badge_color=color,
+                          icon=KIND_ICONS.get(g.kind, "📦"), enabled=bool(g.todo), sub=sub)
+        if len(mods) > MAX_MOD_ROWS:
+            rest = mods[MAX_MOD_ROWS:]
+            chosen = sum(1 for g in rest if g.key in self.sel)
+            self._more_lbl = ctk.CTkLabel(self.list, text=f"… i jeszcze {len(rest)} modów "
+                                                          f"(zaznaczone z nich: {chosen})",
+                                          text_color=T.MUTED)
+            self._more_lbl.pack(pady=6)
+        self._update()
+
+    def _list_changed(self):
+        chosen = set(self.list.selected())
+        for k in self.list.keys():
+            if k in chosen:
+                self.sel.add(k)
+            else:
+                self.sel.discard(k)
+        self._update()
+
     def _toggle_all(self):
-        self.list.set_all(len(self.list.selected()) < len(self.list.keys()))
+        needed = {g.key for g in self._needed()}
+        if self.sel >= needed:
+            self.sel.clear()
+        else:
+            self.sel |= needed
+        self.list.set_all(bool(self.sel))
 
     def _chosen(self):
-        if self.list.checkable and self.list.selected():
-            return [self.todo[k] for k in self.list.selected()]
-        return list(self.todo.values())
+        return [f for g in self.mods if g.key in self.sel for f in g.todo]
 
     def _update(self):
-        if not self.todo:
+        needed = self._needed()
+        if not needed:
             return
         files = self._chosen()
+        mods = sum(1 for g in needed if g.key in self.sel)
         size = sum(f.size for f in files)
-        partial = self.list.checkable and self.list.selected()
-        self.dl_btn.configure(text=f"⬇  Pobierz ({len(files)})" if partial else "⬇  Pobierz wszystko")
-        self.summary.configure(text=("Zaznaczono " if partial else "Do pobrania: ")
-                                    + f"{plural_files(len(files))}  •  {fmt_size(size)}")
+        self.dl_btn.configure(text=f"⬇  Pobierz zaznaczone ({mods})",
+                              state="normal" if files else "disabled")
+        self.sel_btn.configure(text="Odznacz wszystko" if mods == len(needed) else "Zaznacz wszystko")
+        self.summary.configure(text=f"Zaznaczono {mods} z {len(needed)} modów  •  "
+                                    f"{plural_files(len(files))}  •  {fmt_size(size)}" if files
+                               else "Zaznacz mody, które chcesz pobrać")
 
     # ----- sprawdzanie -----
 
     def _start_check(self):
         if not self.folder or (self.job and self.job.phase != "done"):
             return
-        self.todo = {}
+        self.mods = []
+        self.sel = set()
         self.dl_btn.pack_forget()
         self.sel_btn.pack_forget()
+        self.filter.pack_forget()
         self.check_btn.configure(text="Anuluj", command=self._cancel_check)
         self.summary.configure(text="")
         self._new_list(True, "Sprawdzam mody…")
@@ -367,38 +425,32 @@ class ClientSyncView(View):
             return
 
         total = sum(v["size"] for v in job.index.values())
+        self.mods = job.mods
+        needed = self._needed()
         self.bar.set(1.0)
-        self.stats_lbl.configure(text=f"Host: {plural_files(len(job.index))}  •  {fmt_size(total)}   •   "
-                                      f"aktualne: {job.ok_count}   •   sprawdzono w {job.duration:.1f} s")
-        if not job.todo:
+        self.stats_lbl.configure(text=f"Host udostępnia {len(self.mods)} modów ({plural_files(len(job.index))}, "
+                                      f"{fmt_size(total)})   •   aktualne: {len(self.mods) - len(needed)}   •   "
+                                      f"sprawdzono w {job.duration:.1f} s")
+        self.filter.pack(fill="x", padx=20, pady=(2, 0), before=self.list_holder)
+        if not needed:
             self.bar.set_color(T.GREEN)
-            self.state_lbl.configure(text="✔ Wszystkie mody są aktualne", text_color=T.GREEN)
-            self.list.set_empty_text("Nie ma nic do pobrania 🎉")
+            self.state_lbl.configure(text="✔ Masz wszystkie mody hosta – wszystko aktualne", text_color=T.GREEN)
             self.summary.configure(text="")
+            self.filter.set("Wszystkie mody hosta")
+            self._set_filter("Wszystkie mody hosta")
             self.conn.set_state("aktualny", 0)
             return
 
-        self.todo = {f.rel: f for f in job.todo}
-        size = sum(f.size for f in job.todo)
-        missing = sum(1 for f in job.todo if f.reason == "brakuje")
+        missing = sum(1 for g in needed if g.status == "brakuje")
+        size = sum(g.todo_size for g in needed)
+        self.sel = {g.key for g in needed}
         self.bar.set_color(T.YELLOW)
-        self.state_lbl.configure(text=f"Do pobrania: {plural_files(len(job.todo))}  •  {fmt_size(size)}",
-                                 text_color=T.YELLOW)
-        self.stats_lbl.configure(text=self.stats_lbl.cget("text") +
-                                 f"   •   brakuje: {missing}, inna wersja: {len(job.todo) - missing}")
-        checkable = len(job.todo) <= MAX_FILE_ROWS
-        self._new_list(checkable, "")
-        for f in job.todo[:MAX_FILE_ROWS]:
-            self.list.add(f.rel, f.name, False, size=f.size, checked=True, badge=f.reason)
-        if not checkable:
-            self._more_lbl = ctk.CTkLabel(self.list, text=f"… i jeszcze {len(job.todo) - MAX_FILE_ROWS} plików "
-                                                          f"(przy tylu plikach pobierane jest wszystko)",
-                                          text_color=T.MUTED)
-            self._more_lbl.pack(pady=6)
+        self.state_lbl.configure(text=f"Brakuje {missing}, nieaktualne {len(needed) - missing}  •  "
+                                      f"{fmt_size(size)} do pobrania", text_color=T.YELLOW)
         self.dl_btn.pack(side="right", padx=4, pady=10, before=self.check_btn)
-        if checkable:
-            self.sel_btn.pack(side="right", padx=4, pady=10, after=self.check_btn)
-        self._update()
+        self.sel_btn.pack(side="right", padx=4, pady=10, after=self.check_btn)
+        self.filter.set("Do pobrania")
+        self._set_filter("Do pobrania")
         self.conn.set_state("czeka na pobieranie", size)
 
     def _download(self):
