@@ -20,7 +20,7 @@ from requests.adapters import HTTPAdapter
 
 from net.protocol import CHUNK, HDR_AUTH, HDR_CLIENT, MAGIC, make_proof
 from utils.config import CLIENT_CACHE
-from utils.files import safe_join
+from utils.files import mods_rel, resolve_mods_root, safe_join
 from utils.fmt import fmt_size
 from utils.hashing import HASH_CHUNK, Cancelled, HashCache, md5_file
 from utils.speed import SpeedMeter
@@ -134,10 +134,15 @@ CATEGORY_LABELS = {"tracks": "Mapa", "bikes": "Motor", "rider": "Rider", "riders
                    "tyres": "Opony", "misc": "Inne"}
 
 
+def local_path(folder, rel):
+    """Gdzie u klienta leży plik z indeksu hosta – zawsze względem folderu mods."""
+    return safe_join(folder, mods_rel(rel))
+
+
 def mod_key(rel):
     """'tracks/motocross/Foo.pkz' -> 'tracks/motocross/Foo.pkz',
     'tracks/motocross/Foo/terrain/a.hrc' -> 'tracks/motocross/Foo'."""
-    parts = [p for p in rel.replace("\\", "/").split("/") if p]
+    parts = [p for p in mods_rel(rel).split("/") if p]
     for i, p in enumerate(parts):
         if p.lower() not in CATEGORY_DIRS or i == len(parts) - 1:
             return "/".join(parts[:i + 1])
@@ -176,7 +181,7 @@ class FileItem:
 
     def __init__(self, rel, info, reason):
         self.rel = rel                         # klucz z indeksu hosta (do URL)
-        self.name = rel.replace("\\", "/")     # do wyświetlania
+        self.name = mods_rel(rel)              # względem folderu mods (zapis + wyświetlanie)
         self.size = int(info["size"])
         self.hash = info["hash"]
         self.reason = reason                   # "brakuje" / "inna wersja"
@@ -189,7 +194,7 @@ class CheckJob(threading.Thread):
 
     def __init__(self, conn, folder):
         super().__init__(daemon=True)
-        self.conn, self.folder = conn, folder
+        self.conn, self.folder = conn, resolve_mods_root(folder)
         self.stop = threading.Event()
         self.phase = "host"          # host / check / done
         self.host_done = self.host_total = 0
@@ -251,7 +256,7 @@ class CheckJob(threading.Thread):
         todo, cand, valid = [], [], set()
         for rel, info in self.index.items():
             try:
-                p = safe_join(self.folder, rel)
+                p = local_path(self.folder, rel)
             except ValueError:
                 continue
             valid.add(p)
@@ -334,7 +339,7 @@ class DownloadJob(threading.Thread):
 
     def __init__(self, conn, folder, files, parallel=3):
         super().__init__(daemon=True)
-        self.conn, self.folder = conn, folder
+        self.conn, self.folder = conn, resolve_mods_root(folder)
         self.files = sorted(files, key=lambda f: f.size, reverse=True)   # duże najpierw
         self.parallel = max(1, min(8, parallel))
         self.total = sum(f.size for f in files)
@@ -392,7 +397,7 @@ class DownloadJob(threading.Thread):
             self.active.append(f)
         try:
             try:
-                dest = safe_join(self.folder, f.rel)
+                dest = local_path(self.folder, f.rel)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
             except (ValueError, OSError) as e:
                 f.status = "błąd"

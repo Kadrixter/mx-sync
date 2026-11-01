@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from net.discovery import DiscoveryResponder
 from net.protocol import HDR_AUTH, HDR_CLIENT, HTTP_PORT, MAGIC, make_proof
 from utils.config import HOST_CACHE
-from utils.files import safe_join, walk_files
+from utils.files import mods_rel, resolve_mods_root, walk_files
 from utils.hashing import Cancelled, HashCache, md5_file
 from utils.speed import SpeedMeter
 
@@ -64,7 +64,11 @@ class ModServer:
         self.paused = False
         self.bytes_sent = 0
 
+        # klucze indeksu są zawsze względem folderu mods MX Bikes (jak w skryptach v2/v3),
+        # nawet gdy host wskazał folder 'MX Bikes' albo podfolder typu 'mods\tracks'
+        self.mods_root = resolve_mods_root(self.folder)
         self.index = None           # rel -> {"size", "hash"}
+        self.paths = {}             # rel -> pełna ścieżka pliku na dysku hosta
         self._index_json = b"{}"
         self._index_gz = b""
         self.items = []             # podsumowanie elementów dla GUI
@@ -163,7 +167,15 @@ class ModServer:
                 files += found
                 items.append({"name": name, "is_dir": os.path.isdir(os.path.join(self.folder, name)),
                               "files": len(found), "size": sum(st.st_size for _, _, st in found)})
-            index, todo = {}, []
+            index, todo, paths = {}, [], {}
+            keyed = []
+            for rel, path, st in files:
+                rel = self._key(rel, path)
+                if rel in paths:
+                    continue
+                paths[rel] = path
+                keyed.append((rel, path, st))
+            files = keyed
             for rel, path, st in files:
                 h = cache.get(path, st)
                 if h:
@@ -202,6 +214,7 @@ class ModServer:
             with self._lock:
                 self._index_json, self._index_gz = raw, gzip.compress(raw, 4)
                 self.items = items
+                self.paths = paths
                 self.index = index
             self.scan_dur = time.monotonic() - t0
             self.scan_gen += 1
@@ -212,6 +225,16 @@ class ModServer:
         finally:
             if not stop.is_set():
                 self.scanning = False
+
+    def _key(self, rel, path):
+        """Klucz pliku względem folderu mods (z '/'), żeby klient zapisał go we właściwym miejscu."""
+        try:
+            r = os.path.relpath(path, self.mods_root)
+            if not r.startswith(".."):
+                return mods_rel(r)
+        except ValueError:          # inny dysk niż folder mods
+            pass
+        return mods_rel(rel)
 
     # ---------- klienci ----------
 
@@ -336,13 +359,13 @@ def _make_handler(srv):
             idx = srv.index
             if srv.paused or idx is None:
                 return self._json({"error": "Host wstrzymał pobierania" if srv.paused else "Host skanuje mody"}, 503)
-            info = idx.get(rel) or idx.get(rel.replace("\\", "/"))
-            if info is None:
+            key = rel if rel in idx else mods_rel(rel)
+            info, fp = idx.get(key), srv.paths.get(key)
+            if info is None or fp is None:
                 return self._json({"error": "Plik nie jest udostępniony"}, 404)
             try:
-                fp = safe_join(srv.folder, rel)
                 size = os.path.getsize(fp)
-            except (ValueError, OSError):
+            except OSError:
                 return self._json({"error": "Plik nie istnieje"}, 404)
 
             start, end, partial = 0, size - 1, False

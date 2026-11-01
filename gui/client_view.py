@@ -14,7 +14,7 @@ from net.discovery import DiscoveryScanner
 from net.protocol import parse_address
 from utils import config
 from utils.config import CLIENT_CACHE
-from utils.files import find_mx_mods_folder
+from utils.files import find_mx_mods_folder, resolve_mods_root
 from utils.fmt import fmt_eta, fmt_size, fmt_speed, plural_files
 from utils.hashing import HashCache
 from utils.netinfo import is_radmin_ip, radmin_available
@@ -187,7 +187,9 @@ class ClientSyncView(View):
         self.conn = conn
         self.host = host
         cfg = config.load()
-        folder = cfg.get("client_folder") or find_mx_mods_folder()
+        folder = resolve_mods_root(cfg.get("client_folder") or find_mx_mods_folder())
+        if not (folder and os.path.isdir(folder)):
+            folder = find_mx_mods_folder()          # zapamiętany folder zniknął -> domyślny
         self.folder = folder if folder and os.path.isdir(folder) else None
         self.job = None
         self.mods = []               # ModGroup z ostatniego sprawdzenia
@@ -268,7 +270,8 @@ class ClientSyncView(View):
         d = filedialog.askdirectory(parent=self, title="Wybierz folder z modami MX Bikes",
                                     initialdir=self.folder or os.path.expanduser("~/Documents"))
         if d:
-            self.folder = os.path.normpath(d)
+            # 'MX Bikes' albo 'mods\tracks' -> właściwy folder mods (tam, gdzie gra szuka modów)
+            self.folder = resolve_mods_root(os.path.normpath(d))
             config.update(client_folder=self.folder)
             self._show_folder()
             self._start_check()

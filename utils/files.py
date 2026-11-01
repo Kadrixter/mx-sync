@@ -10,14 +10,69 @@ def resource_path(rel):
     return os.path.join(base, rel)
 
 
-def find_mx_mods_folder():
-    """Domyślny folder modów MX Bikes (także przy Dokumentach w OneDrive)."""
+MODS_DIR = "mods"
+
+
+def _documents_dirs():
+    """Folder Dokumenty z Windows (działa też, gdy jest przeniesiony na inny dysk / do OneDrive)."""
+    out = []
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(260)
+            # CSIDL_PERSONAL = 5 (Moje dokumenty), SHGFP_TYPE_CURRENT = 0
+            if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0 and buf.value:
+                out.append(Path(buf.value))
+        except (OSError, AttributeError):
+            pass
     home = Path.home()
-    for docs in (home / "Documents", home / "OneDrive" / "Documents", home / "OneDrive" / "Dokumenty"):
-        p = docs / "PiBoSo" / "MX Bikes" / "mods"
+    out += [home / "Documents", home / "Dokumenty", home / "OneDrive" / "Documents",
+            home / "OneDrive" / "Dokumenty"]
+    return out
+
+
+def find_mx_mods_folder():
+    """Domyślny folder modów MX Bikes: Dokumenty\\PiBoSo\\MX Bikes\\mods."""
+    for docs in _documents_dirs():
+        p = docs / "PiBoSo" / "MX Bikes" / MODS_DIR
         if p.is_dir():
             return os.path.normpath(str(p))
     return None
+
+
+def resolve_mods_root(path):
+    """Z dowolnie wybranego folderu wyznacza właściwy folder `mods` MX Bikes.
+
+    'MX Bikes' -> 'MX Bikes\\mods', 'mods\\tracks\\motocross' -> 'mods', 'mods' -> 'mods'.
+    Folder spoza struktury MX Bikes zostaje bez zmian.
+    """
+    if not path:
+        return path
+    p = os.path.normpath(os.path.abspath(path))
+    parts = Path(p).parts
+    # wybrany folder leży w mods (albo nim jest); najpierw '...\MX Bikes\mods', potem pierwszy 'mods'
+    hits = [i for i in range(1, len(parts)) if parts[i].lower() == MODS_DIR]
+    if hits:
+        game = [i for i in hits if parts[i - 1].lower() == "mx bikes"]
+        i = game[-1] if game else hits[0]
+        return os.path.normpath(str(Path(*parts[:i + 1])))
+    # wybrano folder gry (MX Bikes) – mods jest w środku
+    sub = os.path.join(p, MODS_DIR)
+    if os.path.isdir(sub):
+        return sub
+    return p
+
+
+def mods_rel(rel):
+    """Ścieżka względna względem folderu mods, zawsze z '/' (bez wiodącego 'mods/').
+
+    Stary host v2 wysyła ścieżki z '\\', a host wskazujący folder 'MX Bikes' –
+    z przedrostkiem 'mods/'; po normalizacji obie trafiają w to samo miejsce.
+    """
+    parts = [x for x in rel.replace("\\", "/").split("/") if x and x != "."]
+    while len(parts) > 1 and parts[0].lower() == MODS_DIR:
+        parts.pop(0)
+    return "/".join(parts)
 
 
 def entry_name(path):
