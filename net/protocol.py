@@ -1,6 +1,8 @@
 """Wspólne stałe i protokół.
 
-Host to serwer HTTP (zgodny ze starym klientem v3):
+Host to serwer HTTP. Od wersji 1.3 protokół 2 – starsze wersje (1.2 i wcześniej, skrypty v2/v3)
+nie łączą się z nową, a nowa ze starymi (MAGIC się różni, a każde zapytanie oprócz /hello musi mieć
+nagłówek X-MXSync-Proto = PROTO – inaczej host odpowiada 426 „zaktualizuj MX Sync”).
   GET /hello              -> {"magic", "id", "name", "protected", "nonce"}   (bez hasła)
   GET /status             -> {"scanning", "scanned", "done", "total", ...}
   GET /index              -> {"ścieżka/względna": {"size", "hash"}}  (503 podczas skanowania)
@@ -15,7 +17,10 @@ Wykrywanie: klient wysyła UDP "MXSYNC?" (broadcast), host odpowiada JSON-em.
 import hashlib
 import hmac
 
-MAGIC = "MXSYNC1"
+PROTO = 2
+MAGIC = f"MXSYNC{PROTO}"
+OLD_VERSION_MSG = "Host ma starą wersję MX Sync – musi zainstalować nową (1.3 lub nowszą)"
+UPDATE_ME_MSG = "Masz starą wersję MX Sync – zainstaluj nową z GitHuba"
 QUERY = b"MXSYNC?"
 DISCOVERY_PORT = 50515
 HTTP_PORT = 8888
@@ -24,6 +29,7 @@ CHUNK = 256 * 1024
 
 HDR_CLIENT = "X-MXSync-Client"
 HDR_AUTH = "X-MXSync-Auth"
+HDR_PROTO = "X-MXSync-Proto"
 
 
 def make_proof(password, nonce):

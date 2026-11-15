@@ -4,7 +4,12 @@ Synchronizacja modów MX Bikes w sieci lokalnej oraz przez Radmin VPN.
 Jeden program obsługuje oba tryby: **Host** (udostępnia mody) i **Klient** (dociąga brakujące / zmienione).
 Wygląd w stylu MX Bikes (czerń + pomarańcz, ikona koła crossowego).
 
-Przy pierwszym uruchomieniu hosta Windows zapyta o zaporę – zezwól na dostęp (sieci prywatne), inaczej klienci nie znajdą hosta.
+## Instalacja
+
+Pobierz `MXSync-Setup-X.Y.Z.exe` z [wydań](https://github.com/Kadrixter/mx-sync/releases/latest) i zainstaluj
+(Windows 10/11, 64-bit). Instalator dodaje MX Sync do menu Start (i opcjonalnie na pulpit), od razu ustawia
+zaporę Windows (sieci prywatne i publiczne – też Radmin VPN), a odinstalować można z „Aplikacji” w Ustawieniach.
+Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji → Uruchom mimo to”.
 
 ## Funkcje
 
@@ -41,19 +46,23 @@ Przy pierwszym uruchomieniu hosta Windows zapyta o zaporę – zezwól na dostę
 - pobieranie równoległe (1–8), animowane paski postępu, prędkość, pozostały czas, status każdego pliku
 - wznawianie przerwanych pobrań (pliki `.part`), automatyczne ponawianie, weryfikacja MD5, sprawdzanie miejsca na dysku
 
-Zgodność: nowy host obsługuje stary `mx_sync_client_v3.py`, a nowy klient łączy się ze starym `mx_sync_host_v2.py`
-(bez wykrywania w sieci – wtedy połącz po IP).
+Zgodność: od 1.3.0 protokół 2 – wersje 1.2.x i starsze skrypty v2/v3 nie łączą się z nową wersją (i odwrotnie).
+Host ze starą wersją widać na liście z dopiskiem „⚠ stara wersja MX Sync”, a stary klient dostaje komunikat, żeby zaktualizować.
 
 **Aktualizacje**
 - przy starcie aplikacja po cichu sprawdza GitHub; przycisk „Sprawdź aktualizacje” na ekranie startowym
-- „Pobierz i zainstaluj” pobiera nowy `MXSync.exe`, podmienia plik i uruchamia nową wersję
+- „Pobierz i zainstaluj” pobiera instalator nowej wersji i uruchamia go po cichu (Windows zapyta o zgodę administratora) –
+  instalator zamyka MX Sync, instaluje nową wersję w tym samym miejscu i uruchamia ją ponownie
 
 ## Wydawanie nowej wersji
 
 1. Zmień `VERSION` w `utils/version.py` (np. `1.2.0`) i zrób commit.
 2. `git tag v1.2.0 && git push origin main v1.2.0`
-3. GitHub Actions (`.github/workflows/release.yml`) zbuduje `MXSync.exe` i opublikuje wydanie –
+3. GitHub Actions (`.github/workflows/release.yml`) zbuduje aplikację (PyInstaller `--onedir`), instalator
+   (Inno Setup, `installer/MXSync.iss`) i opublikuje wydanie z plikiem `MXSync-Setup-X.Y.Z.exe` –
    aplikacje użytkowników zobaczą je po kliknięciu „Sprawdź aktualizacje”.
+
+Lokalnie: `build.bat` (wymaga Inno Setup 6) → `dist\installer\MXSync-Setup-X.Y.Z.exe`.
 
 ## Uruchomienie ze źródeł
 

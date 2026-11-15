@@ -1,13 +1,13 @@
-"""Aktualizacja z GitHub Releases.
+"""Aktualizacja z GitHub Releases – przez instalator (MXSync-Setup-X.Y.Z.exe).
 
 check()    – pyta API GitHuba o najnowsze wydanie i porównuje wersję,
-download() – pobiera nowy MXSync.exe obok obecnego (MXSync.new.exe),
-install()  – uruchamia ukryty skrypt, który po zamknięciu aplikacji podmienia
-             plik .exe i uruchamia nową wersję.
+download() – pobiera instalator do katalogu tymczasowego,
+install()  – uruchamia instalator w trybie cichym (/SILENT – widać tylko pasek postępu);
+             instalator zamyka aplikację, instaluje nową wersję i uruchamia ją ponownie.
 """
+import ctypes
 import os
 import re
-import subprocess
 import sys
 import tempfile
 
@@ -41,11 +41,11 @@ class UpdateInfo:
         self.notes = (data.get("body") or "").strip()
         self.page = data.get("html_url") or RELEASES_PAGE
         self.asset_url, self.asset_size = None, 0
-        for a in data.get("assets", []):
-            if a.get("name", "").lower().endswith(".exe"):
-                self.asset_url = a.get("browser_download_url")
-                self.asset_size = int(a.get("size", 0))
-                break
+        exes = [a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".exe")]
+        exes.sort(key=lambda a: "setup" not in a.get("name", "").lower())   # instalator najpierw
+        if exes:
+            self.asset_url = exes[0].get("browser_download_url")
+            self.asset_size = int(exes[0].get("size", 0))
         self.newer = parse_version(self.tag) > parse_version(VERSION)
 
 
@@ -65,16 +65,11 @@ def check(timeout=8):
     return UpdateInfo(r.json())
 
 
-def _target_dir():
-    d = os.path.dirname(os.path.abspath(sys.executable))
-    return d if os.access(d, os.W_OK) else tempfile.gettempdir()
-
-
 def download(info, progress=None, stop=None):
-    """Pobiera nowy .exe; zwraca jego ścieżkę. progress(done, total)."""
+    """Pobiera instalator; zwraca jego ścieżkę. progress(done, total)."""
     if not info.asset_url:
-        raise UpdateError("Wydanie nie zawiera pliku .exe")
-    dest = os.path.join(_target_dir(), "MXSync.new.exe")
+        raise UpdateError("Wydanie nie zawiera instalatora")
+    dest = os.path.join(tempfile.gettempdir(), f"MXSync-Setup-{info.version or 'nowa'}.exe")
     part = dest + ".part"
     try:
         with requests.get(info.asset_url, stream=True, timeout=(10, 30),
@@ -107,31 +102,17 @@ def download(info, progress=None, stop=None):
     return dest
 
 
-def install(new_exe):
-    """Uruchamia skrypt podmieniający .exe. Po wywołaniu aplikację trzeba zamknąć."""
-    exe = os.path.abspath(sys.executable)
-    script = os.path.join(tempfile.gettempdir(), "mxsync_update.bat")
-    # ping zamiast timeout – timeout nie działa bez konsoli
-    text = f"""@echo off
-set n=0
-:retry
-ping -n 2 127.0.0.1 >nul
-move /y "{new_exe}" "{exe}" >nul 2>&1 && goto ok
-set /a n+=1
-if %n% lss 30 goto retry
-start "" "{new_exe}"
-goto end
-:ok
-start "" "{exe}"
-:end
-(goto) 2>nul & del "%~f0"
-"""
-    with open(script, "w", encoding="oem" if sys.platform == "win32" else "utf-8") as f:
-        f.write(text)
-    # nowa wersja nie może dziedziczyć katalogu tymczasowego tej instancji PyInstallera
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("_MEIPASS", "_PYI"))}
-    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-    # bez DETACHED_PROCESS – wtedy ping/move otwierałyby własne okna konsoli
-    flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(["cmd", "/c", script], env=env, creationflags=flags, close_fds=True,
-                     cwd=os.path.dirname(exe))
+def install(setup_exe):
+    """Uruchamia instalator po cichu. Po wywołaniu aplikację trzeba zamknąć.
+
+    ShellExecute zamiast subprocess – instalator wymaga uprawnień administratora (zapora),
+    więc Windows musi móc pokazać okno UAC.
+    """
+    # nowa wersja (uruchomiona przez instalator) nie może dziedziczyć zmiennych PyInstallera
+    for k in [k for k in os.environ if k.startswith(("_MEIPASS", "_PYI"))]:
+        del os.environ[k]
+    os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    args = "/SILENT /SP- /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
+    rc = ctypes.windll.shell32.ShellExecuteW(None, "open", setup_exe, args, None, 1)
+    if rc <= 32:
+        raise OSError("Instalacja anulowana" if rc == 5 else f"ShellExecute zwrócił {rc}")

@@ -1,5 +1,6 @@
-# Po wypchnięciu tagu vX.Y.Z buduje MXSync.exe i publikuje go jako wydanie na GitHubie.
-# Aplikacja (przycisk „Sprawdź aktualizacje”) pobiera właśnie ten plik.
+# Po wypchnięciu tagu vX.Y.Z buduje instalator MXSync-Setup-X.Y.Z.exe i publikuje go jako wydanie.
+# Aplikacja (przycisk „Sprawdź aktualizacje”) pobiera ten instalator i uruchamia go po cichu.
+# W wydaniu ma być tylko JEDEN plik .exe – stare wersje (1.2.x) biorą pierwszy .exe z wydania.
 name: Wydanie
 
 on:
@@ -26,14 +27,23 @@ jobs:
             "${GITHUB_REF_NAME#v}" "${GITHUB_REPOSITORY}" > utils/version.py
           cat utils/version.py
 
-      - name: Budowanie
+      - name: Budowanie aplikacji
         run: |
           python -m pip install -r requirements.txt
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name MXSync --collect-data customtkinter `
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name MXSync --collect-data customtkinter `
             --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" main.py
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          if (-not (Test-Path $iscc)) { throw "Brak ISCC.exe" }
+          & $iscc "/DAppVersion=$($env:GITHUB_REF_NAME.TrimStart('v'))" installer\MXSync.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
       - name: Publikacja wydania
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/MXSync.exe
+          files: dist/installer/MXSync-Setup-*.exe
           generate_release_notes: true

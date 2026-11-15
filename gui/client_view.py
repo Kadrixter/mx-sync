@@ -44,6 +44,9 @@ def upload_text(peer):
 
 
 def _badges(master, host):
+    if host.get("old"):
+        ctk.CTkLabel(master, text="[⚠ stara wersja MX Sync]", font=T.font(12, "bold"),
+                     text_color=T.RED).pack(side="left", padx=6)
     if host.get("radmin"):
         ctk.CTkLabel(master, text="[Radmin VPN host]", font=T.font(12, "bold"),
                      text_color=T.CYAN).pack(side="left", padx=6)
@@ -317,7 +320,7 @@ class ClientSyncView(View):
     def _p2p_tick(self):
         peer = self.conn.peer
         if peer is None:
-            text = "P2P niedostępne (stary host)" if self.conn.legacy else "P2P wyłączone (brak wolnego portu)"
+            text = "P2P wyłączone (brak wolnego portu)"
         else:
             text = upload_text(peer)
         self.p2p_lbl.configure(text=text, text_color=T.CYAN if peer else T.MUTED)

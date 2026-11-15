@@ -1,9 +1,21 @@
 @echo off
-rem Buduje dist\MXSync.exe (jeden plik, bez konsoli)
+rem Buduje dist\MXSync\ (PyInstaller, folder) i instalator dist\installer\MXSync-Setup-X.Y.Z.exe
+rem Wymaga Inno Setup 6 (https://jrsoftware.org/isdl.php).
 cd /d "%~dp0"
-python -m pip install -r requirements.txt
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name MXSync --collect-data customtkinter ^
-    --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" main.py
+python -m pip install -r requirements.txt || goto :fail
+python -m PyInstaller --noconfirm --clean --onedir --windowed --name MXSync --collect-data customtkinter ^
+    --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" main.py || goto :fail
+for /f "tokens=2 delims==" %%v in ('findstr /b "VERSION" utils\version.py') do set VER=%%~v
+set VER=%VER: =%
+set VER=%VER:"=%
+set ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
+if not exist "%ISCC%" set ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe
+"%ISCC%" /DAppVersion=%VER% installer\MXSync.iss || goto :fail
 echo.
-echo Gotowe: dist\MXSync.exe
+echo Gotowe: dist\installer\MXSync-Setup-%VER%.exe
 pause
+exit /b 0
+:fail
+echo BLAD budowania
+pause
+exit /b 1

@@ -89,7 +89,7 @@ class DiscoveryScanner(threading.Thread):
                 info = json.loads(data.decode("utf-8"))
             except ValueError:
                 continue
-            if isinstance(info, dict) and info.get("magic") == MAGIC:
+            if isinstance(info, dict) and str(info.get("magic", "")).startswith("MXSYNC"):
                 self._register(info, addr[0])
         s.close()
 
@@ -124,6 +124,7 @@ class DiscoveryScanner(threading.Thread):
                 "size": int(info.get("size", 0)),
                 "scanning": bool(info.get("scanning")),
                 "radmin": radmin,
+                "old": info.get("magic") != MAGIC,    # inna wersja protokołu – nie połączy się
                 "last_seen": now,
             }
 

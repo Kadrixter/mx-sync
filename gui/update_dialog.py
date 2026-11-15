@@ -1,4 +1,4 @@
-"""Okno aktualizacji: sprawdza GitHub Releases, pobiera nowy .exe i restartuje aplikację."""
+"""Okno aktualizacji: sprawdza GitHub Releases, pobiera instalator nowej wersji i go uruchamia."""
 import os
 import threading
 import time

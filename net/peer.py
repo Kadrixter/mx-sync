@@ -19,7 +19,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from net.protocol import HDR_AUTH, HDR_CLIENT, PEER_PORT
+from net.protocol import HDR_AUTH, HDR_CLIENT, HDR_PROTO, PEER_PORT, PROTO
 from utils.config import CLIENT_CACHE
 from utils.files import mods_rel, safe_join
 from utils.hashing import HashCache
@@ -149,6 +149,8 @@ def _make_handler(peer):
             self.wfile.write(body)
 
         def _authorized(self):
+            if self.headers.get(HDR_PROTO) != str(PROTO):
+                return False
             return not peer.auth or self.headers.get(HDR_AUTH, "") == peer.auth
 
         def do_POST(self):

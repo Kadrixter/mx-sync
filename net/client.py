@@ -17,7 +17,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from net.peer import PeerServer
-from net.protocol import HDR_AUTH, HDR_CLIENT, MAGIC, make_proof
+from net.protocol import HDR_AUTH, HDR_CLIENT, HDR_PROTO, MAGIC, OLD_VERSION_MSG, PROTO, UPDATE_ME_MSG, make_proof
 from utils.config import CLIENT_CACHE
 from utils.files import mods_rel, resolve_mods_root, safe_join
 from utils.hashing import Cancelled, HashCache, md5_file
@@ -44,7 +44,6 @@ class HostConnection:
         self.client_name = socket.gethostname()
         self.host_name = None
         self.protected = False
-        self.legacy = False          # stary host v3 (bez /hello i /ping)
         self.nonce = ""
         self.state, self.total = "połączony", 0
         self.done_fn = None          # ile już pobrano (ustawia pobieranie) – host pokazuje postęp
@@ -57,23 +56,23 @@ class HostConnection:
         except BaseException:
             self.sess.close()
             raise
-        if not self.legacy:
-            self.peer = PeerServer(self.headers().get(HDR_AUTH))
-            if not self.peer.start():
-                self.peer = None
+        self.peer = PeerServer(self.headers().get(HDR_AUTH))
+        if not self.peer.start():
+            self.peer = None
         threading.Thread(target=self._heartbeat, daemon=True).start()
         self._ping()
 
     def _hello(self):
         r = self.sess.get(self.base + "/hello", timeout=(5, 10))
-        if r.status_code == 404:
-            self.legacy = True
-            r = self.sess.get(self.base + "/status", timeout=(5, 10))
-            r.raise_for_status()
-            return
+        if r.status_code == 404:            # skrypt host v2 – bez /hello
+            raise ValueError(OLD_VERSION_MSG)
         r.raise_for_status()
         info = r.json()
-        if info.get("magic") != MAGIC:
+        magic = str(info.get("magic", ""))
+        if magic != MAGIC:
+            if magic.startswith("MXSYNC"):
+                newer = magic[6:].isdigit() and int(magic[6:]) > PROTO
+                raise ValueError(UPDATE_ME_MSG if newer else OLD_VERSION_MSG)
             raise ValueError("To nie jest host MX Sync")
         self.host_name = info.get("name")
         self.protected = bool(info.get("protected"))
@@ -85,7 +84,7 @@ class HostConnection:
                 raise AuthError("Nieprawidłowe hasło")
 
     def headers(self):
-        h = {HDR_CLIENT: quote(self.client_name)}
+        h = {HDR_CLIENT: quote(self.client_name), HDR_PROTO: str(PROTO)}
         if self.protected:
             h[HDR_AUTH] = make_proof(self.password, self.nonce)
         return h
@@ -102,7 +101,7 @@ class HostConnection:
         self._ping()
 
     def _ping(self):
-        if self.legacy or self._closed.is_set():
+        if self._closed.is_set():
             return
         params = {"state": self.state, "total": self.total,
                   "peer": self.peer.port if self.peer else 0}
@@ -115,8 +114,6 @@ class HostConnection:
 
     def peers(self):
         """Inni klienci tego hosta z serwerem P2P: [{"name", "ip", "port"}]."""
-        if self.legacy:
-            return []
         try:
             r = self.get("/peers", timeout=(3, 5))
             data = r.json() if r.status_code == 200 else []
@@ -136,11 +133,10 @@ class HostConnection:
             self.peer.stop()
 
         def bye():
-            if not self.legacy:
-                try:
-                    self.get("/bye", timeout=2).close()
-                except requests.RequestException:
-                    pass
+            try:
+                self.get("/bye", timeout=2).close()
+            except requests.RequestException:
+                pass
             self.sess.close()
         threading.Thread(target=bye, daemon=True).start()
 

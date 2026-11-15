@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from net.discovery import DiscoveryResponder
-from net.protocol import HDR_AUTH, HDR_CLIENT, HTTP_PORT, MAGIC, make_proof
+from net.protocol import HDR_AUTH, HDR_CLIENT, HDR_PROTO, HTTP_PORT, MAGIC, PROTO, UPDATE_ME_MSG, make_proof
 from utils.config import HOST_CACHE
 from utils.files import mods_rel, resolve_mods_root, walk_files
 from utils.hashing import Cancelled, HashCache, md5_file
@@ -338,7 +338,9 @@ def _make_handler(srv):
             path = unquote(url.path)
             if path == "/hello":
                 return self._json({"magic": MAGIC, "id": srv.id, "name": srv.name,
-                                   "protected": srv.protected, "nonce": srv.nonce})
+                                   "protected": srv.protected, "nonce": srv.nonce, "proto": PROTO})
+            if self.headers.get(HDR_PROTO) != str(PROTO):
+                return self._json({"error": UPDATE_ME_MSG}, 426)
             if not self._authorized():
                 return self._json({"error": "Nieprawidłowe hasło"}, 401)
             if path == "/status":
