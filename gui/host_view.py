@@ -62,7 +62,7 @@ class HostSetupView(View):
         self.pw_entry.pack(side="left", padx=6)
         self.summary = ctk.CTkLabel(foot, text="", text_color=T.MUTED, font=T.font(12))
         self.summary.pack(side="left", padx=10)
-        self.host_btn = T.button(foot, "Hostuj  ▶", self._host, kind="primary", width=130, height=38)
+        self.host_btn = T.button(foot, "Hostuj  >", self._host, kind="primary", width=130, height=38)
         self._btn_visible = False
 
         if self.folder:
@@ -86,7 +86,7 @@ class HostSetupView(View):
         if not folder:
             return
         self.folder = folder
-        self.path_lbl.configure(text=f"📂 {T.shorten(folder, 60)}")
+        self.path_lbl.configure(text=f"Folder: {T.shorten(folder, 60)}")
         self.list.clear()
         _fill_entries(self.list, folder, checked)
         if not self.list.keys():
@@ -121,7 +121,7 @@ class HostSetupView(View):
 
 
 class EditSharesDialog(ctk.CTkToplevel):
-    """✎ Zmiana udostępnionych folderów w trakcie hostowania (potem ponowny skan)."""
+    """Zmiana udostępnionych folderów w trakcie hostowania (potem ponowny skan)."""
 
     def __init__(self, master, folder, checked, on_save):
         super().__init__(master, fg_color=T.BG)
@@ -177,7 +177,7 @@ class HostRunView(View):
 
         bar = self.header("Hostowanie", "Uruchamianie…")
         T.button(bar, "■  Zatrzymaj hosting", self._stop, kind="danger", width=170).pack(side="right")
-        self.pause_btn = T.button(bar, "⏸  Wstrzymaj pobierania", self._toggle_pause, width=190)
+        self.pause_btn = T.button(bar, "||  Wstrzymaj pobierania", self._toggle_pause, width=190)
         self.pause_btn.pack(side="right", padx=8)
 
         info = ctk.CTkFrame(self, fg_color=T.PANEL, corner_radius=10)
@@ -205,7 +205,7 @@ class HostRunView(View):
             body.grid_rowconfigure(row, weight=weight, uniform="lists")
 
         bar, _ = self._grid_section(body, 0, "Udostępnione mody")
-        T.button(bar, "✎ Edytuj", self._edit, width=90, height=28).pack(side="left", padx=(10, 4))
+        T.button(bar, "Edytuj", self._edit, width=90, height=28).pack(side="left", padx=(10, 4))
         T.button(bar, "⟳ Przeskanuj", lambda: self._rescan(False), width=110, height=28).pack(side="left", padx=4)
         T.button(bar, "Pełny skan", lambda: self._rescan(True), width=100, height=28).pack(side="left", padx=4)
         self.files_lbl = ctk.CTkLabel(bar, text="", font=T.font(12), text_color=T.MUTED)
@@ -252,9 +252,9 @@ class HostRunView(View):
         for i in interfaces():
             tag = "   [Radmin VPN]" if i["radmin"] and "radmin" not in i["name"].lower() else ""
             lines.append(f"{i['ip']}:{self.server.port}   ({T.shorten(i['name'], 40)}){tag}")
-        pw = "z hasłem 🔒" if self.server.protected else "bez hasła"
-        self.subtitle_lbl.configure(text=f"Host „{self.name}”  •  {pw}  •  📂 {T.shorten(self.folder, 60)}")
-        warn = f"\n⚠ {self.server.discovery_error} – klienci mogą połączyć się ręcznie po IP" \
+        pw = "z hasłem" if self.server.protected else "bez hasła"
+        self.subtitle_lbl.configure(text=f"Host „{self.name}”  •  {pw}  •  {T.shorten(self.folder, 60)}")
+        warn = f"\n(!) {self.server.discovery_error} – klienci mogą połączyć się ręcznie po IP" \
             if self.server.discovery_error else ""
         self.addr_lbl.configure(text="Adresy: " + ("\n             ".join(lines) or "brak sieci") + warn)
 
@@ -300,7 +300,7 @@ class HostRunView(View):
         for it in items:
             row = ctk.CTkFrame(self.files_box, fg_color=T.ROW, corner_radius=8)
             row.pack(fill="x", padx=6, pady=2)
-            ctk.CTkLabel(row, text=("📁 " if it["is_dir"] else "📄 ") + T.shorten(it["name"], 70),
+            ctk.CTkLabel(row, text=("/ " if it["is_dir"] else "  ") + T.shorten(it["name"], 70),
                          anchor="w", text_color=T.TEXT).pack(side="left", padx=10, pady=4)
             extra = f"{plural_files(it['files'])}  •  " if it["is_dir"] else ""
             ctk.CTkLabel(row, text=extra + fmt_size(it["size"]), text_color=T.MUTED,
@@ -328,7 +328,7 @@ class HostRunView(View):
 
     def _toggle_pause(self):
         self.server.paused = not self.server.paused
-        self.pause_btn.configure(text="▶  Wznów pobierania" if self.server.paused else "⏸  Wstrzymaj pobierania")
+        self.pause_btn.configure(text=">  Wznów pobierania" if self.server.paused else "||  Wstrzymaj pobierania")
 
     # ----- odświeżanie -----
 
@@ -363,7 +363,7 @@ class HostRunView(View):
             if not r:
                 frame = ctk.CTkFrame(self.clients_box, fg_color=T.ROW, corner_radius=8)
                 frame.pack(fill="x", padx=6, pady=2)
-                ctk.CTkLabel(frame, text=f"💻  {s['name']}", text_color=T.TEXT,
+                ctk.CTkLabel(frame, text=s['name'], text_color=T.TEXT,
                              font=T.font(13, "bold")).pack(side="left", padx=10, pady=4)
                 ctk.CTkLabel(frame, text=s["ip"], text_color=T.MUTED, font=T.font(12)).pack(side="left", padx=6)
                 ctk.CTkLabel(frame, text="od " + time.strftime("%H:%M", time.localtime(s["connected_at"])),
@@ -396,7 +396,7 @@ class HostRunView(View):
                 frame.pack(fill="x", padx=6, pady=3)
                 top = ctk.CTkFrame(frame, fg_color="transparent")
                 top.pack(fill="x", padx=12, pady=(8, 2))
-                ctk.CTkLabel(top, text=f"💻  {s['name']}", font=T.font(13, "bold"),
+                ctk.CTkLabel(top, text=s['name'], font=T.font(13, "bold"),
                              text_color=T.TEXT).pack(side="left")
                 speed = ctk.CTkLabel(top, text="", font=T.font(13, "bold"), text_color=T.ACCENT)
                 speed.pack(side="right")
@@ -418,7 +418,7 @@ class HostRunView(View):
                     r["bar"].set(1.0 if done else 0.0)
                 sizes = f"wysłano {fmt_size(sent)}"
             r["bar"].set_color(T.GREEN if done else None)
-            r["speed"].configure(text="✔ gotowe" if done else fmt_speed(s["speed"]),
+            r["speed"].configure(text="gotowe" if done else fmt_speed(s["speed"]),
                                  text_color=T.GREEN if done else T.ACCENT)
             cur = f"  •  {T.shorten(s['current'], 60)}" if s["current"] else ""
             p2p = s.get("progress", 0) - s["sent"]

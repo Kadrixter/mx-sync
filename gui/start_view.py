@@ -17,9 +17,9 @@ from utils.version import VERSION
 CHECKER = 8          # bok pola flagi w szachownicę (px)
 
 SIDES = {
-    "client": {"color": T.ACCENT2, "icon": "⬇", "title": "KLIENT",
+    "client": {"color": T.ACCENT2, "icon": "↓", "title": "KLIENT",
                "desc": "Pobierz brakujące mapy i mody od hosta", "phase": 0.0},
-    "host": {"color": T.ACCENT, "icon": "⬆", "title": "HOST",
+    "host": {"color": T.ACCENT, "icon": "↑", "title": "HOST",
              "desc": "Udostępnij swoje mapy i mody", "phase": math.pi},
 }
 
@@ -97,11 +97,8 @@ class StartView(View):
                                            fill=T.TEXT, anchor="e")
         self._upd_hover = False
         self._upd_new = None
-        if app.update_info is None:
-            from gui.update_dialog import check_in_background
-            check_in_background(self, self._update_checked)
-        else:
-            self._update_checked(app.update_info)
+        if app.update_info:
+            self.on_update_info(app.update_info)
 
         self.cv.bind("<Motion>", self._on_motion)
         self.cv.bind("<Leave>", lambda e: (self._set_hover(None), setattr(self, "_upd_hover", False)))
@@ -126,11 +123,11 @@ class StartView(View):
         box = self.cv.bbox(self.upd_bg)
         return bool(box) and box[0] <= x <= box[2] and box[1] <= y <= box[3]
 
-    def _update_checked(self, info):
-        self.app.update_info = info or False
+    def on_update_info(self, info):
+        """Wołane przez UpdateWatcher, gdy na GitHubie jest nowsza wersja."""
         if info and info.newer:
             self._upd_new = info
-            self.cv.itemconfigure(self.upd_txt, text=f"⬆  Dostępna aktualizacja {info.tag}")
+            self.cv.itemconfigure(self.upd_txt, text=f"↑  Dostępna aktualizacja {info.tag}")
 
     # ----- zdarzenia -----
 

@@ -31,7 +31,7 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
   zakładka „Wszystkie mody hosta” pokazuje pełną listę tego, co host udostępnia
 - mody pogrupowane: **Mapy, Motory, Opony, Kaski, Stroje, Ridery, Inne** – przyciski grup z liczbą modów,
   nagłówki na liście i „Zaznacz grupę”
-- 🔍 wyszukiwarka modów (po nazwie i ścieżce, kilka słów naraz, Esc czyści)
+- wyszukiwarka modów (po nazwie i ścieżce, kilka słów naraz, Esc czyści)
 - **P2P jak torrent**: każdy klient udostępnia innym klientom tego samego hosta mody, które ma aktualne.
   Gdy ktoś pobiera moda, którego mają też inni gracze, plik jest dzielony na kawałki po 4 MB i pobierany
   naraz z hosta i ze wszystkich tych graczy (gracze dołączający w trakcie też są dokładani jako źródła).
@@ -39,7 +39,7 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
   Udostępniane są tylko pliki zweryfikowane (nigdy `.part`), z tym samym hasłem co host.
 - widać, czy P2P działa: przy pobieraniu „Pobierasz z 3 źródeł: host + 2 graczy” z prędkością każdego źródła,
   przy wysyłaniu „Wysyłasz do 2 graczy” (kto i z jaką prędkością), a na liście modów zielona notka
-  „👥 2 osoby mają tego moda”; host widzi, ile każdy klient dostał od innych graczy
+  „2 osoby mają tego moda”; host widzi, ile każdy klient dostał od innych graczy
 - sprawdzanie: hashuje tylko pliki o zgodnym rozmiarze, z cache – kolejne sprawdzenia trwają sekundy
 - mody pobierają się po kolei (mod za modem, w kolejności z listy) – nie wszystkie naraz;
   na ekranie pobierania widać „mod 2 / 7: nazwa”
@@ -47,10 +47,13 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - wznawianie przerwanych pobrań (pliki `.part`), automatyczne ponawianie, weryfikacja MD5, sprawdzanie miejsca na dysku
 
 Zgodność: od 1.3.0 protokół 2 – wersje 1.2.x i starsze skrypty v2/v3 nie łączą się z nową wersją (i odwrotnie).
-Host ze starą wersją widać na liście z dopiskiem „⚠ stara wersja MX Sync”, a stary klient dostaje komunikat, żeby zaktualizować.
+Host ze starą wersją widać na liście z dopiskiem „! stara wersja MX Sync”, a stary klient dostaje komunikat, żeby zaktualizować.
 
 **Aktualizacje**
-- przy starcie aplikacja po cichu sprawdza GitHub; przycisk „Sprawdź aktualizacje” na ekranie startowym
+- aplikacja sprawdza GitHub przy starcie i potem co 10 minut (także gdy leży w tle); gdy jest nowa wersja,
+  u góry okna (na każdym ekranie) pojawia się pomarańczowy pasek, a ikona na pasku zadań mruga, jeśli okno nie jest aktywne
+- kliknięcie paska od razu pobiera instalator, instaluje i uruchamia program ponownie; „x” chowa pasek do następnej wersji
+- przycisk „Sprawdź aktualizacje” na ekranie startowym
 - „Pobierz i zainstaluj” pobiera instalator nowej wersji i uruchamia go po cichu (Windows zapyta o zgodę administratora) –
   instalator zamyka MX Sync, instaluje nową wersję w tym samym miejscu i uruchamia ją ponownie
 

@@ -5,6 +5,7 @@ import customtkinter as ctk
 
 from gui import theme as T
 from gui.start_view import StartView
+from gui.update_banner import UpdateWatcher
 from utils.files import resource_path
 from utils.version import VERSION
 
@@ -47,10 +48,15 @@ class App(ctk.CTk):
             self.iconbitmap(icon)
             self.after(300, lambda: set_crisp_icon(self, icon))
         self._view = None
-        self.update_info = None      # wynik cichego sprawdzenia aktualizacji przy starcie
+        self.update_info = None      # None = jeszcze nie sprawdzono, False = brak nowszej, UpdateInfo
         self.update_dialog = None    # otwarte okno aktualizacji (najwyżej jedno)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.update_watcher = UpdateWatcher(self)   # przy starcie i co 10 min
         self.show(StartView)
+
+    @property
+    def current_view(self):
+        return self._view
 
     def show(self, cls, **kw):
         if self._view:
@@ -59,18 +65,21 @@ class App(ctk.CTk):
         self._view = cls(self, **kw)
         self._view.pack(fill="both", expand=True)
 
-    def open_updates(self, info=None):
+    def open_updates(self, info=None, auto=False):
+        """Okno aktualizacji; auto=True – od razu pobiera i instaluje (kliknięcie paska)."""
         from gui.update_dialog import UpdateDialog
         if self.update_dialog is not None and self.update_dialog.winfo_exists():
             self.update_dialog.lift()
             self.update_dialog.focus_force()
             return
-        self.update_dialog = UpdateDialog(self, info)
+        self.update_watcher.banner.hide()
+        self.update_dialog = UpdateDialog(self, info, auto=auto)
 
     def quit_app(self):
         self._on_close()
 
     def _on_close(self):
+        self.closing = True
         if self._view:
             self._view.cleanup()
             self._view = None

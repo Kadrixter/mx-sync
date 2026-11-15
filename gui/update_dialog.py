@@ -42,7 +42,7 @@ def check_in_background(widget, on_result):
 class UpdateDialog(ctk.CTkToplevel):
     W, H = 460, 360
 
-    def __init__(self, app, info=None):
+    def __init__(self, app, info=None, auto=False):
         super().__init__(app, fg_color=T.BG)
         # CTkToplevel przy starcie pokazuje białe okno, chowa je i pokazuje znowu (kolor paska
         # tytułu), a po 200 ms podmienia ikonę – okno jest przezroczyste, aż to wszystko minie
@@ -80,6 +80,8 @@ class UpdateDialog(ctk.CTkToplevel):
 
         if info is not None:
             self._show(info)
+            if auto and info.newer and updater.is_frozen() and info.asset_url:
+                self._download()
         else:
             self._check()
 
@@ -156,7 +158,7 @@ class UpdateDialog(ctk.CTkToplevel):
     def _show(self, info):
         self.info = info
         if not info.newer:
-            self.msg.configure(text=f"✔ Masz najnowszą wersję (v{VERSION})", text_color=T.GREEN)
+            self.msg.configure(text=f"Masz najnowszą wersję (v{VERSION}) :]", text_color=T.GREEN)
             self._buttons(("OK", self._close, "primary", 120))
             return
         self.msg.configure(text=f"Dostępna nowa wersja: {info.name}", text_color=T.ACCENT2)
@@ -166,7 +168,7 @@ class UpdateDialog(ctk.CTkToplevel):
             self.notes.configure(state="disabled")
         if updater.is_frozen() and info.asset_url:
             size = f" ({fmt_size(info.asset_size)})" if info.asset_size else ""
-            self._buttons((f"⬇ Pobierz i zainstaluj{size}", self._download, "primary", 250),
+            self._buttons((f"↓ Pobierz i zainstaluj{size}", self._download, "primary", 250),
                           ("Później", self._close, "secondary", 100))
         else:
             # uruchomione ze źródeł – pokaż stronę wydania
@@ -210,6 +212,10 @@ class UpdateDialog(ctk.CTkToplevel):
     def destroy(self):
         if getattr(self.app, "update_dialog", None) is self:
             self.app.update_dialog = None
+            info = self.app.update_info      # zamknięte bez instalacji – pasek wraca
+            watcher = getattr(self.app, "update_watcher", None)
+            if info and watcher and info.tag != watcher.dismissed and not getattr(self.app, "closing", False):
+                watcher.banner.show(info)
         super().destroy()
 
     def _close(self):

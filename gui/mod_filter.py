@@ -5,8 +5,8 @@ from gui import theme as T
 from net.client import KIND_GROUPS
 
 ALL = "Wszystkie"
-GROUP_ICONS = {"Mapa": "🏁", "Motor": "🏍", "Opony": "◎", "Kask": "⛑", "Strój": "🧤",
-               "Rider": "🪖", "Inne": "📦"}
+GROUP_ICONS = {"Mapa": "#", "Motor": ">", "Opony": "o", "Kask": "^", "Strój": "~",
+               "Rider": "@", "Inne": "*"}
 DEBOUNCE_MS = 250
 
 
@@ -22,14 +22,14 @@ class ModFilterBar(ctk.CTkFrame):
 
         box = ctk.CTkFrame(self, fg_color=T.ROW, corner_radius=8)
         box.pack(side="left", padx=(0, 8))
-        ctk.CTkLabel(box, text="🔍", font=T.font(14), text_color=T.MUTED, width=26).pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(box, text="szukaj:", font=T.font(12), text_color=T.MUTED, width=50).pack(side="left", padx=(8, 0))
         self.entry = ctk.CTkEntry(box, width=220, height=30, border_width=0, fg_color=T.ROW,
                                   placeholder_text="Szukaj moda…", placeholder_text_color=T.MUTED,
                                   text_color=T.TEXT, font=T.font(13))
         self.entry.pack(side="left", padx=(0, 2), pady=2)
         self.entry.bind("<KeyRelease>", self._typed)
         self.entry.bind("<Escape>", lambda e: self.clear_search())
-        self.clear_btn = ctk.CTkButton(box, text="✕", width=26, height=26, fg_color="transparent",
+        self.clear_btn = ctk.CTkButton(box, text="x", width=26, height=26, fg_color="transparent",
                                        hover_color=T.ROW_HOVER, text_color=T.MUTED, command=self.clear_search)
 
         self.groups = ctk.CTkSegmentedButton(self, values=[ALL], command=self._group_clicked,

@@ -28,7 +28,7 @@ KIND_ORDER = {k: i for i, (k, _) in enumerate(KIND_GROUPS)}
 KIND_PLURAL = dict(KIND_GROUPS)
 STATUS_ORDER = {"brakuje": 0, "nieaktualny": 1, "aktualny": 2}
 STATUS_BADGES = {"brakuje": ("BRAKUJE", T.ORANGE), "nieaktualny": ("NIEAKTUALNY", T.YELLOW),
-                 "aktualny": ("✔ AKTUALNY", T.GREEN)}
+                 "aktualny": ("AKTUALNY", T.GREEN)}
 
 
 def upload_text(peer):
@@ -39,19 +39,19 @@ def upload_text(peer):
     if not takers:
         return f"⇅ P2P włączone – inni gracze mogą pobierać od Ciebie  •  wysłano łącznie {fmt_size(peer.bytes_up)}"
     who = ",  ".join(f"{T.shorten(n, 16)} {fmt_speed(sp)}" for n, sp in takers[:4])
-    return (f"⬆ Wysyłasz do {players_gen(len(takers))} ({fmt_speed(sum(sp for _, sp in takers))}):  {who}"
+    return (f"↑ Wysyłasz do {players_gen(len(takers))} ({fmt_speed(sum(sp for _, sp in takers))}):  {who}"
             f"  •  wysłano łącznie {fmt_size(peer.bytes_up)}")
 
 
 def _badges(master, host):
     if host.get("old"):
-        ctk.CTkLabel(master, text="[⚠ stara wersja MX Sync]", font=T.font(12, "bold"),
+        ctk.CTkLabel(master, text="[! stara wersja MX Sync]", font=T.font(12, "bold"),
                      text_color=T.RED).pack(side="left", padx=6)
     if host.get("radmin"):
         ctk.CTkLabel(master, text="[Radmin VPN host]", font=T.font(12, "bold"),
                      text_color=T.CYAN).pack(side="left", padx=6)
     if host.get("protected"):
-        ctk.CTkLabel(master, text="[🔒 z hasłem]", font=T.font(12, "bold"),
+        ctk.CTkLabel(master, text="[z hasłem]", font=T.font(12, "bold"),
                      text_color=T.YELLOW).pack(side="left", padx=6)
 
 
@@ -126,7 +126,7 @@ class ClientServersView(View):
             card.pack(fill="x", padx=6, pady=4)
             line = ctk.CTkFrame(card, fg_color="transparent")
             line.pack(side="left", fill="x", expand=True, padx=12, pady=10)
-            name = ctk.CTkLabel(line, text=f"🖥  {h['name']}", font=T.font(15, "bold"), text_color=T.TEXT)
+            name = ctk.CTkLabel(line, text=h["name"], font=T.font(15, "bold"), text_color=T.TEXT)
             name.pack(side="left")
             _badges(line, h)
             addr = ctk.CTkLabel(line, text=f"{h['ip']}:{h['port']}", font=T.font(12), text_color=T.MUTED)
@@ -278,7 +278,7 @@ class ClientSyncView(View):
         foot.pack(fill="x", padx=20, pady=(6, 16))
         self.summary = ctk.CTkLabel(foot, text="", font=T.font(13), text_color=T.TEXT)
         self.summary.pack(side="left", padx=14, pady=12)
-        self.dl_btn = T.button(foot, "⬇  Pobierz zaznaczone", self._download, kind="primary", width=210, height=40)
+        self.dl_btn = T.button(foot, "↓  Pobierz zaznaczone", self._download, kind="primary", width=210, height=40)
         self.check_btn = T.button(foot, "⟳ Sprawdź ponownie", self._start_check, width=160, height=40)
         self.check_btn.pack(side="right", padx=(4, 12), pady=10)
         self.sel_btn = T.button(foot, "Zaznacz wszystko", self._toggle_all, width=130, height=40)
@@ -295,7 +295,7 @@ class ClientSyncView(View):
     # ----- ustawienia -----
 
     def _show_folder(self):
-        self.path_lbl.configure(text=f"📂 {T.shorten(self.folder, 60)}")
+        self.path_lbl.configure(text=f"Folder: {T.shorten(self.folder, 60)}")
 
     def _choose_folder(self):
         if self.job and self.job.phase != "done":
@@ -335,7 +335,7 @@ class ClientSyncView(View):
         n = self.scan.counts.get(key, 0) if self.scan else 0
         if not n:
             return ""
-        return f"👥 {plural_people(n)} {'ma' if n == 1 else 'mają'} tego moda"
+        return f"{plural_people(n)} {'ma' if n == 1 else 'mają'} tego moda"
 
     def _parallel(self):
         try:
@@ -371,9 +371,9 @@ class ClientSyncView(View):
         base, mods = self._visible()
         self.fbar.set_counts(base)
         if self.fbar.active() and base:
-            empty = "Brak modów pasujących do wyszukiwania 🔍"
+            empty = "Brak modów pasujących do wyszukiwania :/"
         else:
-            empty = "Nie ma nic do pobrania 🎉" if not self.show_all else "Host nic nie udostępnia"
+            empty = "Nie ma nic do pobrania :D" if not self.show_all else "Host nic nie udostępnia"
         self._new_list(True, empty)
         self._group_btns = {}
         mods = sorted(mods, key=lambda g: (KIND_ORDER.get(g.kind, 99), STATUS_ORDER[g.status], g.name.lower()))
@@ -389,7 +389,7 @@ class ClientSyncView(View):
             sub = g.kind + (f"  •  {g.path}" if g.path else "")
             self.list.add(g.key, g.name, True, size=g.todo_size if g.todo else g.size,
                           checked=g.key in self.sel, badge=badge, badge_color=color,
-                          icon=KIND_ICONS.get(g.kind, "📦"), enabled=bool(g.todo), sub=sub,
+                          icon=KIND_ICONS.get(g.kind, "*"), enabled=bool(g.todo), sub=sub,
                           note=self._peer_note(g.key))
         if len(mods) > MAX_MOD_ROWS:
             rest = mods[MAX_MOD_ROWS:]
@@ -405,7 +405,7 @@ class ClientSyncView(View):
             info += f"  •  do pobrania: {len(need)}"
         if need:
             info += f"  •  {fmt_size(sum(m.todo_size for m in need))}"
-        btn = self.list.add_header(f"{KIND_ICONS.get(kind, '📦')}  {KIND_PLURAL.get(kind, kind).upper()}", info,
+        btn = self.list.add_header(f"{KIND_ICONS.get(kind, '*')}  {KIND_PLURAL.get(kind, kind).upper()}", info,
                                    "Zaznacz grupę" if need else None, lambda k=kind: self._toggle_group(k))
         if btn:
             self._group_btns[kind] = btn
@@ -445,7 +445,7 @@ class ClientSyncView(View):
         files = self._chosen()
         mods = sum(1 for g in needed if g.key in self.sel)
         size = sum(f.size for f in files)
-        self.dl_btn.configure(text=f"⬇  Pobierz zaznaczone ({mods})",
+        self.dl_btn.configure(text=f"↓  Pobierz zaznaczone ({mods})",
                               state="normal" if files else "disabled")
         vis = {g.key for g in self._visible()[1] if g.todo}
         word = "widoczne" if self.fbar.active() else "wszystko"
@@ -538,7 +538,7 @@ class ClientSyncView(View):
         self.filters.pack(fill="x", padx=20, pady=(2, 0), before=self.list_holder)
         if not needed:
             self.bar.set_color(T.GREEN)
-            self.state_lbl.configure(text="✔ Masz wszystkie mody hosta – wszystko aktualne", text_color=T.GREEN)
+            self.state_lbl.configure(text="Masz wszystkie mody hosta – wszystko aktualne :]", text_color=T.GREEN)
             self.summary.configure(text="")
             self.filter.set("Wszystkie mody hosta")
             self._set_filter("Wszystkie mody hosta")
@@ -726,7 +726,7 @@ class ClientDownloadView(View):
             if status != last[0]:
                 last[0] = status
                 color = self.STATUS_COLORS.get(f.status, T.MUTED)
-                lbl.configure(text=("✔ " if f.status == "gotowe" else "") + status, text_color=color)
+                lbl.configure(text=status, text_color=color)
 
         if job.finished:
             self._finish()
@@ -741,7 +741,7 @@ class ClientDownloadView(View):
                 return ""
             n = len(used)
             return (f"Pobrano z {n} {'źródła' if n == 1 else 'źródeł'}:   " + "   •   ".join(
-                ("🖥 host" if x.is_host else f"💻 {T.shorten(x.name, 18)}") + f" {fmt_size(x.bytes)}" for x in used))
+                ("host" if x.is_host else T.shorten(x.name, 18)) + f" {fmt_size(x.bytes)}" for x in used))
         srcs = [x for x in job.sources if not x.dead]
         if not srcs:
             return "Szukam źródeł…"
@@ -749,7 +749,7 @@ class ClientDownloadView(View):
         total = sum(x.meter.speed() for x in srcs)
         p2p = sum(x.meter.speed() for x in peers)
         n = len(srcs)
-        line1 = f"⬇ Pobierasz z {n} {'źródła' if n == 1 else 'źródeł'}"
+        line1 = f"↓ Pobierasz z {n} {'źródła' if n == 1 else 'źródeł'}"
         if peers:
             line1 += f": host + {len(peers)} {'gracz' if len(peers) == 1 else 'graczy'}"
             line1 += f"  •  łącznie {fmt_speed(total)}  •  od graczy (P2P) {fmt_speed(p2p)}"
@@ -757,7 +757,7 @@ class ClientDownloadView(View):
                 line1 += f", pobrano od nich {fmt_size(job.peer_bytes)}"
         else:
             line1 += f" (tylko host)  •  {fmt_speed(total)}  •  nikt inny w sieci nie ma tych modów"
-        parts = [("🖥 host" if x.is_host else f"💻 {T.shorten(x.name, 18)}") + f" {fmt_speed(x.meter.speed())}"
+        parts = [("host" if x.is_host else T.shorten(x.name, 18)) + f" {fmt_speed(x.meter.speed())}"
                  for x in srcs]
         lines = [line1, "      " + "   •   ".join(parts)] if peers else [line1]
         up = upload_text(self.conn.peer)
@@ -786,7 +786,7 @@ class ClientDownloadView(View):
                 s["row"].pack(fill="x")
                 s["shown"] = True
             pct = f.done / f.size if f.size else 1.0
-            s["lbl"].configure(text=f"⬇  {T.shorten(f.name, 80)}   {fmt_size(f.done)} / {fmt_size(f.size)}"
+            s["lbl"].configure(text=f"↓  {T.shorten(f.name, 80)}   {fmt_size(f.done)} / {fmt_size(f.size)}"
                                     + ("   (ponawiam…)" if f.status == "ponawiam…" else ""))
             s["bar"].set(pct)
 
@@ -817,8 +817,8 @@ class ClientDownloadView(View):
             self.pct_lbl.configure(text="100%", text_color=T.GREEN)
             p2p = job.peer_bytes
             extra = f"  •  od innych graczy (P2P): {fmt_size(p2p)}" if p2p else ""
-            self.result_lbl.configure(text="✔ Mody zsynchronizowane" + extra, text_color=T.GREEN)
-            T.button(self.foot, "📂 Otwórz folder", self._open, kind="success", width=150).pack(side="right", padx=4)
+            self.result_lbl.configure(text="Mody zsynchronizowane :]" + extra, text_color=T.GREEN)
+            T.button(self.foot, "Otwórz folder", self._open, kind="success", width=150).pack(side="right", padx=4)
         T.button(self.foot, "← Sprawdź ponownie", self._back, width=150).pack(side="right", padx=4)
 
     def _cancel(self):

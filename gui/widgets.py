@@ -136,7 +136,7 @@ class SelectableList(ctk.CTkScrollableFrame):
                                  checkmark_color="#111111",
                                  state="normal" if enabled else "disabled")
             cb.pack(side="left", padx=(10, 2), pady=7)
-        icon_lbl = ctk.CTkLabel(row, text=icon or ("📁" if is_dir else "📄"), width=24, font=T.font(14),
+        icon_lbl = ctk.CTkLabel(row, text=icon or ("/" if is_dir else "-"), width=24, font=T.font(14),
                                 text_color=T.ACCENT if is_dir else T.MUTED)
         icon_lbl.pack(side="left", padx=(8 if not cb else 2, 4), pady=7)
         name_lbl = ctk.CTkLabel(row, text=T.shorten(name, 60 if sub else 80), anchor="w",
@@ -149,7 +149,7 @@ class SelectableList(ctk.CTkScrollableFrame):
                                    text_color=T.MUTED)
             sub_lbl.pack(side="left", padx=(8, 0))
             widgets.append(sub_lbl)
-        # mała zielona notka (np. „👥 2 osoby mają tego moda”) – zmieniana przez set_note()
+        # mała zielona notka (np. „2 osoby mają tego moda”) – zmieniana przez set_note()
         note_lbl = ctk.CTkLabel(row, text=note, anchor="w", font=T.font(11), text_color=T.GREEN)
         note_lbl.pack(side="left", padx=(10, 0))
         widgets.append(note_lbl)
@@ -168,7 +168,7 @@ class SelectableList(ctk.CTkScrollableFrame):
                            "is_dir": is_dir, "name": name, "enabled": enabled}
 
     def add_header(self, text, count_text="", button_text=None, command=None):
-        """Nagłówek grupy (np. „🏍 Motory”) z opcjonalnym przyciskiem „Zaznacz grupę”."""
+        """Nagłówek grupy (np. „> MOTORY”) z opcjonalnym przyciskiem „Zaznacz grupę”."""
         self._empty.pack_forget()
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.pack(fill="x", padx=8, pady=(10 if self._extras or self._rows else 4, 2))
