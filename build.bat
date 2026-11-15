@@ -1,5 +1,5 @@
 @echo off
-rem Buduje dist\MXSync\ (PyInstaller, folder) i instalator dist\installer\MXSync-Setup-X.Y.Z.exe
+rem Buduje dist\MXSync\ (PyInstaller, folder) i instalator dist\installer\MXSync-Setup.exe
 rem Wymaga Inno Setup 6 (https://jrsoftware.org/isdl.php).
 cd /d "%~dp0"
 python -m pip install -r requirements.txt || goto :fail
@@ -13,7 +13,7 @@ set ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 if not exist "%ISCC%" set ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe
 "%ISCC%" /DAppVersion=%VER% installer\MXSync.iss || goto :fail
 echo.
-echo Gotowe: dist\installer\MXSync-Setup-%VER%.exe
+echo Gotowe: dist\installer\MXSync-Setup.exe (wersja %VER%)
 pause
 exit /b 0
 :fail

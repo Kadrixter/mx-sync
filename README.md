@@ -1,110 +1,102 @@
 # MX Sync
 
-Wymiana modów MX Bikes między graczami w sieci lokalnej i przez Radmin VPN – jak torrent.
-Nie ma już hosta ani klienta: każdy gracz udostępnia cały swój folder modów i pobiera od innych.
-Mod, który ma kilka osób, pobiera się naraz od wszystkich, a pobierający od razu wysyłają
-pobrane kawałki dalej – im więcej graczy, tym szybciej.
+Wymiana modów MX Bikes między znajomymi – jak torrent. Każdy gracz udostępnia swój folder modów, widzi,
+czego mu brakuje w porównaniu z innymi, i pobiera to jednym kliknięciem od wszystkich naraz.
+Działa w sieci lokalnej, przez Radmin VPN i bezpośrednio przez internet.
 
-## Instalacja
+## [Pobierz MX Sync – kliknij tutaj](https://github.com/Kadrixter/mx-sync/releases/latest/download/MXSync-Setup.exe)
 
-Pobierz `MXSync-Setup-X.Y.Z.exe` z [wydań](https://github.com/Kadrixter/mx-sync/releases/latest) i zainstaluj
-(Windows 10/11, 64-bit). Instalator dodaje MX Sync do menu Start (i opcjonalnie na pulpit), od razu ustawia
-zaporę Windows (też dla Radmin VPN), a odinstalować można z „Aplikacji” w Ustawieniach.
-Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji → Uruchom mimo to”.
+Instalator dla Windows 10/11 (64-bit). Zawsze najnowsza wersja, program sam się potem aktualizuje.
+Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji”, a potem „Uruchom mimo to”.
+
+![Brakujące mody](docs/screenshots/01-brakujace.png)
 
 ## Jak to działa
 
-- **Gracze pojawiają się sami** – MX Sync szuka innych w sieci lokalnej i w Radmin VPN. Gracze przekazują sobie
-  też listy znajomych, więc wystarczy, że widzisz jednego, żeby zobaczyć resztę. Spoza sieci: „Dodaj gracza po IP”.
-- **Zgodność modów** – przy każdym graczu kółko z procentem: ile modów macie identycznych (w tej samej wersji)
-  względem wszystkich modów was obu. W szczegółach gracza zakładki: *Brakuje ci*, *Inna wersja*, *Wspólne*,
-  *Tylko u ciebie*.
-- **Rodzaje** – Mapy, Motory, Malowania, Opony, Postacie (kaski, gogle, stroje, rękawice, buty, ochraniacze,
-  modele postaci, animacje, kamerki, fonty – w filtrze „Postacie” rozwijane menu), Inne.
-- **Malowania** – osobny rodzaj obok motorów; pod nazwą małym drukiem motor, do którego jest malowanie
-  (folder nad `paints`, np. `bikes/sm1oemktm450f/paints/` -> `sm1oemktm450f`).
-- **Mody i grupy** – każdy plik `.pkz` to osobny mod. Folder z paczkami (np. `tracks/motocross/Paczka2024/`) to grupa:
-  grupy są na górze listy, a zaznaczenie grupy zaznacza wszystkie jej mapy / mody. Folder z rozpakowanym modem
-  (pliki `.ini`, `.hrc`, …) to jeden mod.
-- **Brakujące mody** – zbiorczo wszystko, co mają gracze online, a ty nie (z liczbą graczy, którzy mają dany mod).
-- **Filtr „min. graczy z modem”** (domyślnie 2) – pokazuje tylko mody, które ma co najmniej tylu graczy.
-- **Wyszukiwarka** – po nazwie, grupie i folderze; kilka słów naraz, znaki `_ - .` są pomijane
-  (np. `spa` albo `1998` znajdzie `0xspa1998.pkz`).
-- **Integralność** – wybierasz z menu, co sprawdzić (wszystko, mapy, motory, postacie – kaski, buty…) i z kim
-  porównać (wszyscy online albo jeden gracz). Sprawdzenie liczy sumy twoich modów z tego zakresu od nowa; lista
-  pokazuje mody o tej samej nazwie co u innych, ale z inną zawartością – każdy można pominąć albo pobrać wersję innych.
-- **Dodatki osobno** – malowania (`paints`), rękawice (`gloves`) i gogle (`goggles`) to osobne mody, także w środku
-  rozpakowanego modu (np. `rider/riders/neuro/gloves/red.pnt`); podmiana wersji modelu ich nie usuwa.
-- **Pobieranie** – zaznaczasz mody (albo całą grupę) i „Pobierz zaznaczone”. Każdy mod pobiera się od wszystkich,
-  którzy go mają, i od innych pobierających w tym samym czasie. Inna wersja modu jest podmieniana: pobierane są
-  tylko zmienione pliki, a pliki starej wersji, których nie ma w nowej, są usuwane.
-- **Moja biblioteka** – twoje mody, ilu graczy ma każdy z nich; folder modów wykrywany automatycznie
-  (`Dokumenty\PiBoSo\MX Bikes\mods`), można zmienić w Ustawieniach.
-- **Transfery** – postęp, prędkość i od ilu graczy pobierasz; komu i jak szybko wysyłasz; ostatnio pobrane.
-- **Połączenie bezpośrednie (jak w qBittorrent)** – MX Sync sam otwiera port na routerze (UPnP / NAT-PMP),
-  sprawdza twoje publiczne IP i przekazuje je graczom z tym samym hasłem grupy. Gracze łączą się wtedy wprost przez
-  internet zamiast przez tunel Radmina; Radmin / LAN zostają jako zapas. Gdy port jest zamknięty u obu stron,
-  program próbuje hole punchingu (obaj gracze łączą się do siebie w tej samej chwili przez uTP). Inny gracz
-  sprawdza, czy twój port jest naprawdę otwarty. Wykrywa CGNAT / podwójny router. Port wystawiony do internetu
-  przyjmuje połączenia tylko od znanych graczy (filtr IP). W Ustawieniach: włącznik (domyślnie włączony), stan
-  portu, własny port i twoje publiczne IP (zasłonięte – cyfry widać po najechaniu). Port `50520` TCP+UDP można też
-  przekierować na routerze ręcznie.
-- **Zasobnik** – krzyżyk chowa MX Sync obok zegara (dalej udostępnia mody). Opcjonalnie start razem z Windows.
-  Ponowne uruchomienie programu pokazuje już działające okno.
-- **Ustawienia** – nazwa gracza, folder modów, hasło grupy (widzicie się tylko z tym samym hasłem; hasło nie idzie
-  przez sieć), limity wysyłania / pobierania, zasobnik, autostart.
-- **Aktualizacje** – sprawdzanie GitHuba przy starcie i co 10 minut; pomarańczowy pasek u góry okna, kliknięcie
-  pobiera instalator, instaluje i uruchamia program ponownie.
+1. Instalujesz i uruchamiasz MX Sync. Folder modów MX Bikes wykrywa się sam
+   (`Dokumenty\PiBoSo\MX Bikes\mods`), a program przygotowuje twoje mody do udostępniania.
+2. Inni gracze z MX Sync pojawiają się sami po lewej – w tej samej sieci, w Radmin VPN albo przez internet.
+   Gracze przekazują sobie listy znajomych, więc wystarczy, że widzisz jednego, żeby zobaczyć resztę.
+3. Przy każdym graczu kółko z procentem pokazuje, jak bardzo wasze mody się zgadzają.
+4. W „Brakujące mody” widzisz wszystko, co mają inni, a ty nie. Zaznaczasz i klikasz „Pobierz zaznaczone”.
+5. Mod pobiera się naraz od wszystkich, którzy go mają, a ty od razu wysyłasz pobrane kawałki dalej –
+   im więcej graczy, tym szybciej.
 
-Pierwsze uruchomienie przygotowuje mody do udostępniania (liczy sumy kontrolne – przy dużej bibliotece kilka minut)
-etapami: rider, tyres, misc, bikes, na końcu tracks. Po każdym etapie postęp jest zapisywany, a gotowe mody są już
-udostępniane. Kolejne starty biorą wynik z pamięci i liczą tylko nowe / zmienione mody – program o tym informuje.
+## Gracze i porównanie modów
 
-Zgodność: 2.2 to protokół 5 (dodatki osobno) – nie łączy się z 2.1 i starszymi; starsze wersje same proponują aktualizację.
+Po kliknięciu gracza widać, czego ci brakuje, co masz w innej wersji, co macie wspólne i co jest tylko u ciebie.
+Mody są pogrupowane: Mapy, Motory, Malowania, Opony, Postacie (kaski, gogle, stroje, rękawice, buty…) i Inne.
+Folder z paczkami (np. cały sezon torów) to grupa – jednym kliknięciem zaznaczasz wszystko z niej.
 
-## Pod spodem
+![Porównanie z graczem](docs/screenshots/02-gracz.png)
 
-- każdy mod to osobny prywatny torrent (BitTorrent v2, biblioteka libtorrent); ten sam mod u dwóch graczy ma ten sam
-  identyfikator – po nim porównywane są biblioteki i łączeni są wszyscy, którzy go mają
-- torrenty są prywatne: bez DHT i publicznych trackerów, połączenia tylko między graczami MX Sync
-- UPnP / NAT-PMP otwierają port na routerze (przydatne przy dodawaniu graczy po IP przez internet)
+- **Wyszukiwarka** – po nazwie, grupie i folderze; znaki `_ - .` są pomijane (`spa` albo `1998` znajdzie `0xspa1998.pkz`).
+- **Filtr „min. graczy z modem”** – pokazuje tylko mody, które ma co najmniej tylu graczy.
+- **Inna wersja** – gdy masz mod o tej samej nazwie, ale z inną zawartością, możesz pobrać wersję innych;
+  pobierane są tylko zmienione pliki.
 
-| Port | Protokół | Zastosowanie |
-|------|----------|--------------|
-| 50515 | UDP | wyszukiwanie graczy |
-| 8888 | TCP (HTTP) | informacje o graczu i jego modach (kolejny wolny, jeśli zajęty) |
-| 50520 | TCP + UDP | transfery (BitTorrent / uTP; kolejny wolny, jeśli zajęty) |
+## Transfery
 
-## Wydawanie nowej wersji
+Postęp każdego modu, prędkość, od ilu graczy pobierasz i ile zostało. Niżej widać, komu i jak szybko wysyłasz,
+oraz ostatnio pobrane mody.
 
-1. Zmień `VERSION` w `utils/version.py` i zrób commit.
-2. `git tag vX.Y.Z && git push origin main vX.Y.Z`
-3. GitHub Actions (`.github/workflows/release.yml`) zbuduje aplikację (Python 3.12, PyInstaller `--onedir`),
-   instalator (Inno Setup, `installer/MXSync.iss`) i opublikuje wydanie z plikiem `MXSync-Setup-X.Y.Z.exe`.
+![Transfery](docs/screenshots/03-transfery.png)
 
-## Uruchomienie ze źródeł
+## Moja biblioteka
 
-Wymagany Python **3.12** (libtorrent ma gotowe paczki dla Windows tylko dla tej wersji).
+Wszystkie twoje mody i przy każdym informacja, ilu graczy też go ma. Folder modów można zmienić, otworzyć
+albo przeskanować ponownie. Nowe i zmienione mody program wykrywa sam.
 
-```
-py -3.12 -m pip install -r requirements.txt
-py -3.12 main.py
-```
+![Moja biblioteka](docs/screenshots/04-biblioteka.png)
 
-Dwie instancje na jednym komputerze (testy): ustaw zmienną `MXSYNC_HOME` na inny folder dla każdej.
-Budowanie instalatora: `build.bat` (wymaga Inno Setup 6) → `dist\installer\MXSync-Setup-X.Y.Z.exe`.
+## Integralność
 
-## Struktura
+Sprawdza, czy mody o tej samej nazwie co u innych to naprawdę te same pliki. Wybierasz, co sprawdzić
+(wszystko, mapy, motory, postacie…) i z kim porównać. Każdą różnicę możesz pominąć albo pobrać wersję innych.
 
-```
-main.py          start (jedna instancja, --tray = start w zasobniku)
-core/            mods.py (co jest modem), library.py (skan + torrenty + cache), engine.py (libtorrent),
-                 api.py (HTTP gracza), discovery.py (UDP), players.py (inni gracze), compare.py, node.py (całość)
-gui/             app.py (okno), topbar, sidebar, views/ (porównanie, biblioteka, transfery), mod_table.py
-                 (szybka lista na Canvasie), tray.py, settings_dialog.py, update_banner.py / update_dialog.py
-utils/           ustawienia, autostart, aktualizacje, interfejsy sieciowe / Radmin VPN, formatowanie
-assets/          ikona i logo + make_icon.py, który je generuje
-installer/       skrypt Inno Setup
-```
+![Integralność plików](docs/screenshots/05-integralnosc.png)
 
-Dane: `%USERPROFILE%\.mxsync.json` (ustawienia), `%USERPROFILE%\.mxsync\` (identyfikator gracza, cache torrentów).
+## Połączenie bezpośrednie (jak w qBittorrent)
+
+MX Sync sam otwiera port na routerze (UPnP / NAT-PMP) i dzieli się twoim publicznym IP tylko z graczami
+z tym samym hasłem grupy. Dzięki temu pobierasz od innych wprost przez internet, a nie przez wolniejszy tunel
+Radmina – Radmin i sieć lokalna zostają jako zapas.
+
+- Inny gracz sprawdza, czy twój port jest naprawdę otwarty („port 50520 otwarty – sprawdził Kuba”).
+- Gdy port jest zamknięty u obu stron, program próbuje hole punchingu (obaj łączycie się do siebie naraz).
+- Wykrywa CGNAT operatora i podwójny router – wtedy mówi wprost, że zostaje Radmin.
+- Otwarty port wpuszcza tylko znanych graczy MX Sync.
+- Przy graczu widać, jak jesteście połączeni: bezpośrednio, Radmin VPN albo LAN.
+
+Jeśli router nie obsługuje UPnP, włącz je w panelu routera albo przekieruj ręcznie port **50520 TCP i UDP**
+na swój komputer.
+
+## Ustawienia
+
+![Ustawienia](docs/screenshots/06-ustawienia.png)
+
+- **Nazwa gracza** – widzą ją inni.
+- **Hasło grupy** – widzicie się tylko z osobami z tym samym hasłem; samo hasło nie idzie przez sieć.
+- **Limity** wysyłania i pobierania oraz własny port transferów.
+- **Połączenie bezpośrednie** – włącznik (domyślnie włączony), stan portu i twoje publiczne IP,
+  zasłonięte iksami – cyfry widać dopiero po najechaniu myszką.
+- **Zasobnik** – krzyżyk chowa MX Sync obok zegara, a mody dalej się udostępniają. Opcjonalnie start razem z Windows.
+
+## Aktualizacje
+
+Program sprawdza nowe wersje przy starcie i co 10 minut. Gdy jest nowa, u góry okna pojawia się pomarańczowy
+pasek – kliknięcie pobiera instalator, instaluje i uruchamia MX Sync ponownie.
+
+## Porty
+
+| Port | Protokół | Do czego |
+|------|----------|----------|
+| 50515 | UDP | wyszukiwanie graczy w sieci i w Radmin VPN |
+| 8888 | TCP | informacje o graczu i jego modach |
+| 50520 | TCP + UDP | przesyłanie modów (ten port warto otworzyć na routerze) |
+
+Instalator sam dodaje MX Sync do zapory Windows.
+
+---
+
+Budowanie, struktura kodu i wydawanie wersji: [docs/ROZWOJ.md](docs/ROZWOJ.md).

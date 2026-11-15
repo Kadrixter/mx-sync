@@ -1,4 +1,4 @@
-"""Aktualizacja z GitHub Releases – przez instalator (MXSync-Setup-X.Y.Z.exe).
+"""Aktualizacja z GitHub Releases – przez instalator (MXSync-Setup.exe).
 
 check()    – pyta API GitHuba o najnowsze wydanie i porównuje wersję,
 download() – pobiera instalator do katalogu tymczasowego,

@@ -1,4 +1,4 @@
-# Po wypchnięciu tagu vX.Y.Z buduje instalator MXSync-Setup-X.Y.Z.exe i publikuje go jako wydanie.
+# Po wypchnięciu tagu vX.Y.Z buduje instalator MXSync-Setup.exe (stała nazwa – link „releases/latest/download/MXSync-Setup.exe” w README zawsze działa) i publikuje go jako wydanie.
 # Aplikacja (przycisk „Sprawdź aktualizacje”) pobiera ten instalator i uruchamia go po cichu.
 # W wydaniu ma być tylko JEDEN plik .exe – stare wersje (1.2.x) biorą pierwszy .exe z wydania.
 name: Wydanie
@@ -45,5 +45,5 @@ jobs:
       - name: Publikacja wydania
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/installer/MXSync-Setup-*.exe
+          files: dist/installer/MXSync-Setup.exe
           generate_release_notes: true
