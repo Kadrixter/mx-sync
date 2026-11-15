@@ -173,13 +173,14 @@ def safe_path(root, key):
 
 class LocalMod:
     """Mod na dysku: lista plików (rel względem folderu mods, rozmiar, mtime)."""
-    __slots__ = ("key", "files", "size", "is_dir")
+    __slots__ = ("key", "files", "size", "is_dir", "hidden")
 
     def __init__(self, key):
         self.key = key
         self.files = []
         self.size = 0
         self.is_dir = False
+        self.hidden = False     # ma plik z atrybutem „ukryty” (stare wersje liczyły go do sumy modu)
 
     def signature(self):
         """Odcisk zawartości z metadanych – zmiana pliku = inny odcisk (bez czytania danych)."""
@@ -187,6 +188,10 @@ class LocalMod:
         for rel, size, mtime in sorted(self.files):
             h.update(f"{rel}\0{size}\0{mtime}\n".encode("utf-8", "surrogatepass"))
         return h.hexdigest()
+
+
+def _is_hidden(st):
+    return bool(getattr(st, "st_file_attributes", 0) & 2)     # FILE_ATTRIBUTE_HIDDEN
 
 
 def _entries(path):
@@ -224,6 +229,7 @@ def _whole_dir(mod, path, rel):
                 continue
             mod.files.append((f"{r}/{f.name}", st.st_size, st.st_mtime_ns))
             mod.size += st.st_size
+            mod.hidden = mod.hidden or _is_hidden(st)
         for d in dirs:
             if top and d.name.lower() in PART_DIRS:
                 parts.append((d.path, f"{r}/{d.name}"))
@@ -268,6 +274,7 @@ def scan_mods(root, stop=None):
             m = mods[key] = LocalMod(key)
             m.files.append((key, st.st_size, st.st_mtime_ns))
             m.size = st.st_size
+            m.hidden = _is_hidden(st)
         stack += [(d.path, f"{rel}/{d.name}" if rel else d.name) for d in dirs]
     return mods
 
@@ -280,6 +287,7 @@ def scan_one(root, key):
         st = os.stat(path)
         m.files.append((key, st.st_size, st.st_mtime_ns))
         m.size = st.st_size
+        m.hidden = _is_hidden(st)
         return m
     m.is_dir = True
     _whole_dir(m, path, key)

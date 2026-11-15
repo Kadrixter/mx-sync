@@ -41,6 +41,8 @@ def make_torrent(path, progress=None):
     if os.path.isdir(path):
         # nazwy w torrencie zaczynają się od nazwy folderu modu: 'neuro\paints\x.pnt'
         files = [e for e in files if belongs_to_mod(e.filename.replace("\\", "/").split("/", 1)[-1])]
+    # bez atrybutów plików: „ukryty” trafiał do torrenta i ten sam plik dawał inną sumę niż u innych
+    files = [lt.create_file_entry(e.filename, e.size) for e in files]
     t = lt.create_torrent(files, 0, lt.create_torrent.v2_only)
     t.set_priv(True)
     t.set_creator("MX Sync")
@@ -144,7 +146,7 @@ class Library:
                 return
             local = scan_mods(root, self._stop)
             forced = (force if callable(force) else (lambda lm: True)) if force else (lambda lm: False)
-            todo = [m for m in local.values() if forced(m) or self._cache.get(m.key, {}).get("sig") != m.signature()]
+            todo = [m for m in local.values() if forced(m) or not self._cached(m)]
             self.to_hash = len(todo)
             first = not self._cache
             if force:
@@ -201,10 +203,16 @@ class Library:
             self.stage = None
             self.scanning = False
 
+    def _cached(self, lm):
+        """Wpis z cache pasuje do modu na dysku. Mody z ukrytymi plikami policzone przed 2.3.1
+        (bez znacznika "na") miały w sumie atrybut pliku – te liczymy jeszcze raz."""
+        c = self._cache.get(lm.key)
+        return bool(c and c.get("sig") == lm.signature() and (c.get("na") or not lm.hidden))
+
     def _mod_for(self, lm, force=False):
         sig = lm.signature()
         c = self._cache.get(lm.key)
-        if not force and c and c.get("sig") == sig and (TORRENTS / f"{c['ih']}.torrent").exists():
+        if not force and self._cached(lm) and (TORRENTS / f"{c['ih']}.torrent").exists():
             return Mod(lm.key, c["ih"], lm.size, len(lm.files))
         self.current, self.current_pct = mod_name(lm.key), 0.0
         try:
@@ -212,7 +220,7 @@ class Library:
         except (RuntimeError, OSError, ValueError):
             return None                 # plik zablokowany / zniknął w trakcie – pominięty
         ih = self.store_torrent(raw)
-        self._cache[lm.key] = {"sig": sig, "ih": ih}
+        self._cache[lm.key] = {"sig": sig, "ih": ih, "na": 1}
         if len(self._cache) % 25 == 0:
             self._save_cache()
         return Mod(lm.key, ih, lm.size, len(lm.files))
@@ -225,7 +233,7 @@ class Library:
             local = scan_one(self.root, key)
         except (OSError, ValueError):
             return
-        self._cache[key] = {"sig": local.signature(), "ih": ih}
+        self._cache[key] = {"sig": local.signature(), "ih": ih, "na": 1}
         self._save_cache()
         with self._lock:
             self.mods[key] = Mod(key, ih, local.size, len(local.files))
