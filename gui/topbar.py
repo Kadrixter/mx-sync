@@ -2,12 +2,88 @@
 import os
 
 import customtkinter as ctk
-from PIL import Image
+from PIL import Image, ImageSequence
 
 from gui import theme as T
 from utils.files import resource_path
 from utils.fmt import fmt_size, fmt_speed, plural_mods
 from utils.version import VERSION
+
+LOGO_H = 44          # wysokość animowanego logo w pasku (px, przed skalowaniem DPI)
+MIN_FRAME_MS = 20    # minimalny czas klatki
+DEFAULT_FRAME_MS = 90
+HIDDEN_POLL_MS = 500  # co ile sprawdzać, czy okno wróciło z zasobnika
+
+
+def load_gif_frames(path, height=LOGO_H, bg=None):
+    """Wczytuje wszystkie klatki GIF-a jako RGBA, skaluje do `height` z zachowaniem proporcji.
+
+    Zwraca listę (PIL.Image, czas_ms). Jeśli podano `bg` (np. "#111216"), klatki są nakładane
+    na to tło przed skalowaniem, więc na krawędziach nie zostają ciemne/jasne obwódki.
+    """
+    out = []
+    with Image.open(path) as im:
+        for frame in ImageSequence.Iterator(im):
+            rgba = frame.convert("RGBA")  # Pillow składa klatki częściowe (disposal)
+            if bg:
+                base = Image.new("RGBA", rgba.size, bg)
+                rgba = Image.alpha_composite(base, rgba)
+            w = max(1, round(rgba.width * height / rgba.height))
+            ms = frame.info.get("duration") or DEFAULT_FRAME_MS
+            out.append((rgba.resize((w, height), Image.LANCZOS), max(MIN_FRAME_MS, int(ms))))
+    return out
+
+
+class AnimatedLogo(ctk.CTkLabel):
+    """Etykieta z zapętlonym GIF-em; nie podmienia klatek, gdy okno jest schowane do zasobnika."""
+
+    def __init__(self, master, frames, **kw):
+        super().__init__(master, text="", **kw)
+        # CTkImage sam skaluje pod DPI, więc obraz jest ostry przy każdym skalowaniu Windows
+        self._frames = [(ctk.CTkImage(img, size=img.size), ms) for img, ms in frames]
+        self._i = 0
+        self._job = None
+        self.configure(image=self._frames[0][0])
+        if len(self._frames) > 1:
+            self._job = self.after(self._frames[0][1], self._tick)
+
+    def _tick(self):
+        self._job = None
+        try:
+            hidden = self.winfo_toplevel().state() == "withdrawn"
+        except Exception:
+            return
+        if hidden:
+            self._job = self.after(HIDDEN_POLL_MS, self._tick)
+            return
+        self._i = (self._i + 1) % len(self._frames)
+        img, ms = self._frames[self._i]
+        self.configure(image=img)
+        self._job = self.after(ms, self._tick)
+
+    def destroy(self):
+        if self._job is not None:
+            try:
+                self.after_cancel(self._job)
+            except Exception:
+                pass
+            self._job = None
+        super().destroy()
+
+
+def make_logo(master):
+    """Animowane logo z assets/logo.gif, a gdy go nie ma (lub jest uszkodzony) - statyczne wheel.png."""
+    try:
+        frames = load_gif_frames(resource_path(os.path.join("assets", "logo.gif")), bg=T.SIDEBAR)
+        if frames:
+            return AnimatedLogo(master, frames)
+    except (OSError, ValueError, EOFError):
+        pass
+    try:
+        img = Image.open(resource_path(os.path.join("assets", "wheel.png")))
+        return ctk.CTkLabel(master, image=ctk.CTkImage(img, size=(38, 38)), text="")
+    except OSError:
+        return None
 
 
 class TopBar(ctk.CTkFrame):
@@ -15,12 +91,9 @@ class TopBar(ctk.CTkFrame):
         super().__init__(master, fg_color=T.SIDEBAR, corner_radius=0, height=64)
         self.pack_propagate(False)
         self.app = app
-        try:
-            img = Image.open(resource_path(os.path.join("assets", "wheel.png")))
-            logo = ctk.CTkImage(img, size=(38, 38))
-            ctk.CTkLabel(self, image=logo, text="").pack(side="left", padx=(18, 10))
-        except OSError:
-            pass
+        logo = make_logo(self)
+        if logo is not None:
+            logo.pack(side="left", padx=(18, 10))
         brand = ctk.CTkFrame(self, fg_color="transparent")
         brand.pack(side="left")
         ctk.CTkLabel(brand, text="MX SYNC", font=T.title_font(22), text_color=T.TEXT, height=24).pack(anchor="w")

@@ -25,6 +25,7 @@ CARD_HOVER = "#1f2228"
 CARD_SEL = "#2a1f17"        # zaznaczona karta (ciepły odcień pomarańczu)
 BORDER = "#262930"
 FAINT = "#5d616b"
+TEXT_DISABLED = "#9a9ea8"   # napis na wyłączonym przycisku (kontrast ~6:1 z ROW)
 
 # rodzaje modów: znaczek ASCII i kolor
 KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT), "Malowanie": ("%", YELLOW),
@@ -80,7 +81,7 @@ def button(master, text, command=None, kind="secondary", **kw):
     kw.setdefault("corner_radius", 8)
     kw.setdefault("font", font(13, "bold" if kind == "primary" else "normal"))
     b = ctk.CTkButton(master, text=text, command=command, fg_color=fg,
-                      hover_color=hover, text_color=txt, text_color_disabled=FAINT, **kw)
+                      hover_color=hover, text_color=txt, text_color_disabled=TEXT_DISABLED, **kw)
     b.mx_fg = fg
     return b
 

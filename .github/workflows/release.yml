@@ -31,7 +31,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m PyInstaller --noconfirm --clean --onedir --windowed --name MXSync --collect-data customtkinter --hidden-import pystray._win32 `
-            --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" main.py
+            --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" --add-data "assets\logo.gif;assets" main.py
 
       - name: Inno Setup
         shell: pwsh
