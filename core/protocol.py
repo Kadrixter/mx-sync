@@ -1,4 +1,4 @@
-"""Protokół 3 (MX Sync 2.0) – każdy gracz jest równy: udostępnia swoje mody i pobiera od innych.
+"""Protokół 5 (MX Sync 2.2) – każdy gracz jest równy: udostępnia swoje mody i pobiera od innych.
 
 HTTP (port HTTP_PORT, kolejny wolny):
   GET /hello            -> {"magic", "proto", "id", "name", "lt", "rev", "mods", "size", "protected", "nonce"}
@@ -6,14 +6,15 @@ HTTP (port HTTP_PORT, kolejny wolny):
   GET /torrent/<ih>     -> plik .torrent modu
   GET /show             -> (tylko z 127.0.0.1) druga instancja prosi o pokazanie okna
 Hasło grupy: nagłówek X-MXSync-Auth = HMAC-SHA256(hasło, nonce adresata) – hasło nie idzie przez sieć.
-Wykrywanie (UDP DISCOVERY_PORT): b"MXSYNC3?" + JSON nadawcy -> odpowiedź JSON z /hello.
+Wykrywanie (UDP DISCOVERY_PORT): b"MXSYNC5?" + JSON nadawcy -> odpowiedź JSON z /hello.
 Stare wersje (1.x) pytają b"MXSYNC?" – odpowiadamy, żeby zobaczyły, że trzeba zaktualizować.
 Transfery: libtorrent (port w polu "lt"), prywatne torrenty v2 – po jednym na mod.
 """
 import hashlib
 import hmac
 
-PROTO = 4                   # 4: mod = pojedynczy plik .pkz, foldery z paczkami to grupy
+PROTO = 5                   # 4: mod = pojedynczy plik .pkz, foldery z paczkami to grupy
+                            # 5: malowania / rękawice / gogle osobno także w rozpakowanych modach
 MAGIC = f"MXSYNC{PROTO}"
 QUERY = MAGIC.encode() + b"?"
 OLD_QUERY = b"MXSYNC?"

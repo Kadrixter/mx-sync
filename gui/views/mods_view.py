@@ -1,17 +1,15 @@
 """Porównanie modów: z jednym graczem (mode="player") albo ze wszystkimi naraz (mode="all")."""
 import customtkinter as ctk
 
-from core.mods import KIND_GROUPS
 from gui import theme as T
 from gui.mod_table import ModTable
 from gui.rows import build_rows, filter_mods, players_text
-from gui.widgets import MinHolders, Ring, SearchBox
+from gui.widgets import FlowRow, KindFilter, MinHolders, Ring, SearchBox, autowrap
 from utils.fmt import fmt_size, plural_mods
 
 TABS_PLAYER = [("missing", "Brakuje ci"), ("different", "Inna wersja"), ("same", "Wspólne"),
                ("only_mine", "Tylko u ciebie")]
 TABS_ALL = [("missing", "Brakuje ci"), ("different", "Inna wersja")]
-KINDS = [("", "Wszystko")] + KIND_GROUPS
 
 
 class ModsView(ctk.CTkFrame):
@@ -31,45 +29,45 @@ class ModsView(ctk.CTkFrame):
         box.pack(side="left", fill="x", expand=True, pady=10)
         self.title = ctk.CTkLabel(box, text="", font=T.title_font(26), text_color=T.TEXT, anchor="w")
         self.title.pack(fill="x")
-        self.sub = ctk.CTkLabel(box, text="", font=T.font(12), text_color=T.MUTED, anchor="w")
+        self.sub = ctk.CTkLabel(box, text="", font=T.font(12), text_color=T.MUTED, anchor="w", justify="left")
         self.sub.pack(fill="x")
-        self.stats = ctk.CTkLabel(box, text="", font=T.font(13, "bold"), text_color=T.TEXT, anchor="w")
+        self.stats = ctk.CTkLabel(box, text="", font=T.font(13, "bold"), text_color=T.TEXT, anchor="w",
+                                  justify="left")
         self.stats.pack(fill="x", pady=(4, 0))
+        autowrap(self.sub, box, 10)
+        autowrap(self.stats, box, 10)
 
-        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar = self.bar = FlowRow(self)
         bar.pack(fill="x", pady=(0, 8))
         tabs = TABS_PLAYER if mode == "player" else TABS_ALL
         self._tab_labels = dict(tabs)
-        self.tabs = ctk.CTkSegmentedButton(bar, values=[t for _, t in tabs], command=self._tab_clicked,
+        self.tabs = ctk.CTkSegmentedButton(bar.left, values=[t for _, t in tabs], command=self._tab_clicked,
                                            font=T.font(13, "bold"), height=34, fg_color=T.CARD,
                                            selected_color=T.ACCENT, selected_hover_color=T.ACCENT_HOVER,
                                            unselected_color=T.CARD, unselected_hover_color=T.ROW_HOVER,
                                            text_color=T.TEXT)
         self.tabs.pack(side="left")
-        self.search = SearchBox(bar, lambda: self.refresh(force=True))
+        self.search = SearchBox(bar.right, lambda: self.refresh(force=True))
         self.search.pack(side="right")
 
-        filt = ctk.CTkFrame(self, fg_color="transparent")
+        filt = FlowRow(self)
         filt.pack(fill="x", pady=(0, 8))
         self.min_holders = int(app.node.cfg.get("min_holders", 2))
-        MinHolders(filt, self.min_holders, self._min_changed).pack(side="right")
-        self.kinds = ctk.CTkSegmentedButton(filt, values=[k for _, k in KINDS], command=self._kind_clicked,
-                                            font=T.font(12), height=28, fg_color=T.BG,
-                                            selected_color=T.ROW_HOVER, selected_hover_color=T.ROW_HOVER,
-                                            unselected_color=T.BG, unselected_hover_color=T.CARD,
-                                            text_color=T.TEXT)
-        self.kinds.set("Wszystko")
-        self.kinds.pack(side="left")
+        MinHolders(filt.right, self.min_holders, self._min_changed).pack(side="right")
+        KindFilter(filt.left, self._kind_clicked).pack(side="left")
 
         self.table = ModTable(self, on_change=self._update_footer)
         self.table.pack(fill="both", expand=True)
 
-        foot = ctk.CTkFrame(self, fg_color="transparent")
-        foot.pack(fill="x", pady=(10, 0))
-        self.sel_lbl = ctk.CTkLabel(foot, text="", font=T.font(13), text_color=T.MUTED)
+        # stopka pakowana przed listą (before=) – przy niskim oknie kurczy się lista, nie przyciski
+        foot = self.foot = FlowRow(self)
+        foot.pack(side="bottom", fill="x", pady=(10, 0), before=self.table)
+        self.sel_lbl = ctk.CTkLabel(foot.left, text="", font=T.font(13), text_color=T.MUTED)
         self.sel_lbl.pack(side="left")
-        self.dl_btn = T.button(foot, "↓  Pobierz zaznaczone", self._download, kind="primary", width=220, height=40)
-        self.all_btn = T.button(foot, "Zaznacz wszystko", lambda: self.table.set_all(True), width=150, height=40)
+        self.dl_btn = T.button(foot.right, "↓  Pobierz zaznaczone", self._download, kind="primary", width=220,
+                               height=40)
+        self.all_btn = T.button(foot.right, "Zaznacz wszystko", lambda: self.table.set_all(True), width=150,
+                                height=40)
         self._show_actions(True)
         self.tabs.set(self._tab_labels["missing"])
         self.refresh(force=True)
@@ -142,7 +140,7 @@ class ModsView(ctk.CTkFrame):
         if p is None:
             self.title.configure(text="Gracz rozłączony")
             return
-        self.title.configure(text=p.name)
+        self.title.configure(text=T.shorten(p.name, 40))
         self.sub.configure(text=f"{p.state}  ·  {p.via}  ·  {plural_mods(p.mod_count)}  ·  {fmt_size(p.size)}"
                                 + (f"  ·  v{p.version}" if p.version else ""))
         if cmp is None:
@@ -161,6 +159,7 @@ class ModsView(ctk.CTkFrame):
         if list(self.tabs._buttons_dict) != names:
             self.tabs.configure(values=names)
             self.tabs.set(names[current])
+            self.bar.relayout()
 
     # ---------- akcje ----------
 
@@ -171,8 +170,8 @@ class ModsView(ctk.CTkFrame):
         self.table.checked = set()
         self.refresh(force=True)
 
-    def _kind_clicked(self, value):
-        self.kind = next(k for k, v in KINDS if v == value)
+    def _kind_clicked(self, scope):
+        self.kind = scope
         self.refresh(force=True)
 
     def _show_actions(self, on):
@@ -182,6 +181,7 @@ class ModsView(ctk.CTkFrame):
         else:
             self.dl_btn.pack_forget()
             self.all_btn.pack_forget()
+        self.foot.relayout()
 
     def _update_footer(self):
         ids = self.table.checked_ids()
@@ -191,7 +191,7 @@ class ModsView(ctk.CTkFrame):
             hint = (f"ukryto {plural_mods(hidden)} (filtr min. graczy / wyszukiwanie)" if hidden
                     else "kliknij mody albo grupę, żeby je zaznaczyć")
             self.sel_lbl.configure(text=f"zaznaczono {plural_mods(len(ids))}  ·  {fmt_size(size)}" if ids else hint)
-            self.dl_btn.configure(state="normal" if ids else "disabled")
+            T.enable(self.dl_btn, bool(ids))
         else:
             self.sel_lbl.configure(text="")
 

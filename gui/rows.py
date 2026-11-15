@@ -1,7 +1,7 @@
 """Budowanie wierszy listy modów: grupy (foldery z paczkami) na górze, pod nimi wszystkie mody
 w sekcjach według rodzaju. Wspólne dla porównania z graczem, brakujących modów i biblioteki."""
-from core.mods import (KIND_GROUPS, KIND_PLURAL, group_parents, matches, mod_dir, mod_group, mod_subtitle,
-                       search_text)
+from core.mods import (KIND_GROUPS, KIND_PLURAL, group_parents, kind_in, matches, mod_dir, mod_group,
+                       mod_subtitle, search_text)
 from utils.fmt import fmt_size
 
 _TEXT = {}                      # klucz modu -> tekst do wyszukiwania (liczony raz)
@@ -18,7 +18,7 @@ def filter_mods(mods, query="", kind="", min_holders=0, holders=None):
     """Mody pasujące do wyszukiwania, rodzaju i minimalnej liczby graczy (holders: ih -> ilu ma)."""
     out = []
     for m in mods:
-        if kind and m.kind != kind:
+        if kind and not kind_in(m.kind, kind):
             continue
         if query and not matches(_text(m.key), query):
             continue

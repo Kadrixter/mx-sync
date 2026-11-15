@@ -14,22 +14,35 @@ CATEGORY_DIRS = {
     "mods", "tracks", "bikes", "rider", "riders", "tyres", "misc", "motocross", "supercross",
     "enduro", "supermoto", "arenacross", "freestyle", "paints", "helmets", "boots", "gloves",
     "goggles", "protections", "neckbraces", "bodies", "models", "sounds", "skins", "gear",
+    "animations", "fonts", "helmetcams", "dashes", "stands", "pitboard",
 }
 PACKAGE_EXT = (".pkz", ".pkg", ".zip")
 # rodzaj modu z najgłębszego folderu-kategorii w ścieżce ('rider/helmets/X' -> Kask)
-CATEGORY_LABELS = {"tracks": "Mapa", "motocross": "Mapa", "supercross": "Mapa", "enduro": "Mapa",
-                   "supermoto": "Mapa", "arenacross": "Mapa", "freestyle": "Mapa",
-                   "bikes": "Motor", "paints": "Malowanie", "sounds": "Motor", "models": "Motor",
-                   "tyres": "Opony",
-                   "helmets": "Kask",
-                   "boots": "Strój", "gloves": "Strój", "goggles": "Strój", "protections": "Strój",
-                   "neckbraces": "Strój", "gear": "Strój", "skins": "Strój",
-                   "rider": "Rider", "riders": "Rider", "bodies": "Rider",
-                   "misc": "Inne"}
-KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Malowanie", "Malowania"), ("Opony", "Opony"), ("Kask", "Kaski"),
-               ("Strój", "Stroje"), ("Rider", "Ridery"), ("Inne", "Inne")]
+# rodzaje modów (kolejność = kolejność sekcji na liście) i ich nazwy w liczbie mnogiej
+KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Malowanie", "Malowania"), ("Opony", "Opony"),
+               ("Kask", "Kaski"), ("Gogle", "Gogle"), ("Strój", "Stroje"), ("Rękawice", "Rękawice"),
+               ("Buty", "Buty"), ("Ochraniacze", "Ochraniacze"), ("Postać", "Modele postaci"),
+               ("Animacje", "Animacje"), ("Kamerka", "Kamerki"), ("Font", "Fonty"), ("Inne", "Inne")]
 KIND_ORDER = {k: i for i, (k, _) in enumerate(KIND_GROUPS)}
 KIND_PLURAL = dict(KIND_GROUPS)
+# wszystko z folderu rider/ – w filtrach zbiorczo jako „Postacie”
+CHARACTER_KINDS = ("Kask", "Gogle", "Strój", "Rękawice", "Buty", "Ochraniacze", "Postać", "Animacje",
+                   "Kamerka", "Font")
+CHARACTERS = "@postacie"
+# filtr rodzaju na listach: (zakres, etykieta); zakres = rodzaj albo CHARACTERS
+FILTERS = [("", "Wszystko"), ("Mapa", "Mapy"), ("Motor", "Motory"), ("Malowanie", "Malowania"),
+           ("Opony", "Opony"), (CHARACTERS, "Postacie"), ("Inne", "Inne")]
+# podfoldery rider/ -> rodzaj
+RIDER_DIRS = {"animations": "Animacje", "boots": "Buty", "fonts": "Font", "helmetcams": "Kamerka",
+              "helmets": "Kask", "paints": "Strój", "protections": "Ochraniacze", "neckbraces": "Ochraniacze",
+              "riders": "Postać", "gloves": "Rękawice", "goggles": "Gogle"}
+# podfoldery z dodatkami do modu (malowania, rękawice, gogle) – każdy plik to osobny mod, także wewnątrz
+# rozpakowanego modu (np. 'rider/riders/neuro/paints/red.pnt' nie jest częścią modelu 'neuro')
+PART_DIRS = {"paints", "gloves", "goggles"}
+# napis pod nazwą dodatku: do czego jest
+PART_LABEL = {"Malowanie": "do motoru", "Kask": "malowanie kasku", "Gogle": "do kasku", "Strój": "do postaci",
+              "Rękawice": "do postaci", "Buty": "malowanie butów", "Ochraniacze": "malowanie ochraniaczy"}
+_TRACK_DIRS = {"tracks", "motocross", "supercross", "enduro", "supermoto", "arenacross", "freestyle"}
 SKIP_SUFFIXES = (".part", ".parts", ".!qb", ".tmp")
 SKIP_NAMES = {"thumbs.db", "desktop.ini", ".ds_store"}
 # kolejność skanowania (etapy z zapisem postępu): najmniejsze najpierw, tracks – zwykle największe – na końcu
@@ -45,35 +58,57 @@ def norm_rel(rel):
 def mod_kind(key):
     parts = [p.lower() for p in key.split("/")[:-1]]
     first = parts[0] if parts else ""
-    for p in reversed(parts):
-        kind = CATEGORY_LABELS.get(p)
-        # 'tracks/enduro' to mapa, ale 'bikes/enduro' to motor
-        if kind == "Mapa" and p != "tracks" and first != "tracks":
-            continue
-        # malowania motorów: 'bikes/<motor>/paints/x.pnt'; malowania kasków itp. zostają przy swoim rodzaju
-        if kind == "Malowanie" and first != "bikes":
-            continue
-        if kind:
-            return kind
+    if first == "bikes":
+        return "Malowanie" if "paints" in parts else "Motor"
+    if first == "tyres":
+        return "Opony"
+    if first == "rider":
+        if "gloves" in parts[1:]:
+            return "Rękawice"
+        if "goggles" in parts[1:]:
+            return "Gogle"
+        sub = parts[1] if len(parts) > 1 else ""
+        if sub == "riders" and "paints" in parts[2:]:
+            return "Strój"                  # malowanie modelu postaci = strój
+        if sub in RIDER_DIRS:
+            return RIDER_DIRS[sub]
+        if not sub and key.lower().endswith(".pnt"):
+            return "Strój"                  # stroje leżące wprost w rider/
+        return "Inne"
+    if first == "tracks" or (first not in ("misc",) and any(p in _TRACK_DIRS for p in parts)):
+        return "Mapa"
     return "Inne"
 
 
-def paint_bike(key):
-    """Do jakiego motoru jest malowanie: folder nad 'paints' ('bikes/sm1oemktm450f/paints/x.pnt')."""
+def kind_in(kind, scope):
+    """Czy rodzaj pasuje do filtra: '' – wszystko, CHARACTERS – wszystko z rider/, inaczej dokładnie."""
+    if not scope:
+        return True
+    if scope == CHARACTERS:
+        return kind in CHARACTER_KINDS
+    return kind == scope
+
+
+def part_owner(key):
+    """Do czego jest dodatek: folder nad 'paints' / 'gloves' / 'goggles' ('bikes/sm1oemktm450f/paints/x.pnt')."""
     parts = key.split("/")
     for i in range(len(parts) - 2, 0, -1):
-        if parts[i].lower() == "paints":
-            bike = parts[i - 1]
-            return None if bike.lower() in CATEGORY_DIRS else bike
+        if parts[i].lower() in PART_DIRS:
+            owner = parts[i - 1]
+            return None if owner.lower() in CATEGORY_DIRS else owner
     return None
 
 
+def paint_bike(key):
+    """Do jakiego motoru jest malowanie (dla malowań motorów)."""
+    return part_owner(key) if mod_kind(key) == "Malowanie" else None
+
+
 def mod_subtitle(key, kind):
-    """Mały napis pod nazwą modu: przy malowaniu motor, przy reszcie folder."""
-    if kind == "Malowanie":
-        bike = paint_bike(key)
-        if bike:
-            return f"do motoru: {bike}"
+    """Mały napis pod nazwą modu: przy dodatkach (malowania, rękawice, gogle) do czego są, przy reszcie folder."""
+    owner = part_owner(key) if kind in PART_LABEL else None
+    if owner:
+        return f"{PART_LABEL[kind]}: {owner}"
     return mod_dir(key) or "mods"
 
 
@@ -175,10 +210,12 @@ def _entries(path):
 
 
 def _whole_dir(mod, path, rel):
-    """Cały folder (rozpakowany mod) jako jeden mod."""
-    stack = [(path, rel)]
+    """Cały folder (rozpakowany mod) jako jeden mod – bez podfolderów z dodatkami (PART_DIRS),
+    które są osobnymi modami. Zwraca listę pominiętych podfolderów [(ścieżka, klucz)]."""
+    parts = []
+    stack = [(path, rel, True)]
     while stack:
-        p, r = stack.pop()
+        p, r, top = stack.pop()
         files, dirs = _entries(p)
         for f in files:
             try:
@@ -187,7 +224,22 @@ def _whole_dir(mod, path, rel):
                 continue
             mod.files.append((f"{r}/{f.name}", st.st_size, st.st_mtime_ns))
             mod.size += st.st_size
-        stack += [(d.path, f"{r}/{d.name}") for d in dirs]
+        for d in dirs:
+            if top and d.name.lower() in PART_DIRS:
+                parts.append((d.path, f"{r}/{d.name}"))
+            else:
+                stack.append((d.path, f"{r}/{d.name}", False))
+    return parts
+
+
+def belongs_to_mod(rel):
+    """Czy plik 'rel' (względem folderu rozpakowanego modu) należy do modu – to samo co liczy skan:
+    bez podfolderów z dodatkami (PART_DIRS) i bez plików tymczasowych."""
+    parts = rel.replace("\\", "/").split("/")
+    low = parts[-1].lower()
+    if low.endswith(SKIP_SUFFIXES) or low in SKIP_NAMES:
+        return False
+    return not (len(parts) > 1 and parts[0].lower() in PART_DIRS)
 
 
 def scan_mods(root, stop=None):
@@ -205,7 +257,7 @@ def scan_mods(root, stop=None):
         if not is_category and files and not has_package:
             m = mods[rel] = LocalMod(rel)          # rozpakowany mod – cały folder
             m.is_dir = True
-            _whole_dir(m, path, rel)
+            stack += _whole_dir(m, path, rel)      # malowania / rękawice / gogle – osobno, plik po pliku
             continue
         for f in files:                            # kategoria albo grupa: każdy plik osobno
             try:

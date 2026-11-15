@@ -19,6 +19,8 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Zgodność modów** – przy każdym graczu kółko z procentem: ile modów macie identycznych (w tej samej wersji)
   względem wszystkich modów was obu. W szczegółach gracza zakładki: *Brakuje ci*, *Inna wersja*, *Wspólne*,
   *Tylko u ciebie*.
+- **Rodzaje** – Mapy, Motory, Malowania, Opony, Postacie (kaski, gogle, stroje, rękawice, buty, ochraniacze,
+  modele postaci, animacje, kamerki, fonty – w filtrze „Postacie” rozwijane menu), Inne.
 - **Malowania** – osobny rodzaj obok motorów; pod nazwą małym drukiem motor, do którego jest malowanie
   (folder nad `paints`, np. `bikes/sm1oemktm450f/paints/` -> `sm1oemktm450f`).
 - **Mody i grupy** – każdy plik `.pkz` to osobny mod. Folder z paczkami (np. `tracks/motocross/Paczka2024/`) to grupa:
@@ -28,8 +30,11 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Filtr „min. graczy z modem”** (domyślnie 2) – pokazuje tylko mody, które ma co najmniej tylu graczy.
 - **Wyszukiwarka** – po nazwie, grupie i folderze; kilka słów naraz, znaki `_ - .` są pomijane
   (np. `spa` albo `1998` znajdzie `0xspa1998.pkz`).
-- **Integralność** – pełne sprawdzenie liczy sumy wszystkich twoich modów od nowa; lista pokazuje mody o tej samej
-  nazwie co u innych, ale z inną zawartością – każdy można pominąć albo pobrać wersję innych.
+- **Integralność** – wybierasz z menu, co sprawdzić (wszystko, mapy, motory, postacie – kaski, buty…) i z kim
+  porównać (wszyscy online albo jeden gracz). Sprawdzenie liczy sumy twoich modów z tego zakresu od nowa; lista
+  pokazuje mody o tej samej nazwie co u innych, ale z inną zawartością – każdy można pominąć albo pobrać wersję innych.
+- **Dodatki osobno** – malowania (`paints`), rękawice (`gloves`) i gogle (`goggles`) to osobne mody, także w środku
+  rozpakowanego modu (np. `rider/riders/neuro/gloves/red.pnt`); podmiana wersji modelu ich nie usuwa.
 - **Pobieranie** – zaznaczasz mody (albo całą grupę) i „Pobierz zaznaczone”. Każdy mod pobiera się od wszystkich,
   którzy go mają, i od innych pobierających w tym samym czasie. Inna wersja modu jest podmieniana: pobierane są
   tylko zmienione pliki, a pliki starej wersji, których nie ma w nowej, są usuwane.
@@ -47,7 +52,7 @@ Pierwsze uruchomienie przygotowuje mody do udostępniania (liczy sumy kontrolne 
 etapami: rider, tyres, misc, bikes, na końcu tracks. Po każdym etapie postęp jest zapisywany, a gotowe mody są już
 udostępniane. Kolejne starty biorą wynik z pamięci i liczą tylko nowe / zmienione mody – program o tym informuje.
 
-Zgodność: 2.1 to protokół 4 (mod = pojedynczy plik) – nie łączy się z 2.0 ani 1.x; starsze wersje same proponują aktualizację.
+Zgodność: 2.2 to protokół 5 (dodatki osobno) – nie łączy się z 2.1 i starszymi; starsze wersje same proponują aktualizację.
 
 ## Pod spodem
 

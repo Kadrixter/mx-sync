@@ -3,7 +3,7 @@ import customtkinter as ctk
 
 from core.mods import paint_bike
 from gui import theme as T
-from gui.widgets import AnimatedProgressBar
+from gui.widgets import AnimatedProgressBar, autowrap
 from utils.fmt import fmt_eta, fmt_size, fmt_speed
 
 
@@ -56,17 +56,22 @@ class TransfersView(ctk.CTkFrame):
         self.speed.pack(fill="x", padx=18, pady=(2, 14))
 
         ctk.CTkLabel(self, text="POBIERANIE", font=T.title_font(13), text_color=T.FAINT, anchor="w").pack(fill="x")
-        self.list = ctk.CTkScrollableFrame(self, fg_color=T.CARD, corner_radius=12, height=260)
+        # dolne sekcje pakowane jako pierwsze od dołu – przy niskim oknie kurczy się lista pobierań
+        bottom = ctk.CTkFrame(self, fg_color="transparent")
+        bottom.pack(side="bottom", fill="x")
+        self.list = ctk.CTkScrollableFrame(self, fg_color=T.CARD, corner_radius=12, height=120)
         self.list.pack(fill="both", expand=True, pady=(4, 12))
         self.empty = ctk.CTkLabel(self.list, text="Nic się nie pobiera. Wybierz gracza albo „Brakujące mody”.",
                                   font=T.font(13), text_color=T.MUTED)
-        ctk.CTkLabel(self, text="WYSYŁASZ DO", font=T.title_font(13), text_color=T.FAINT, anchor="w").pack(fill="x")
-        self.up = ctk.CTkLabel(self, text="", font=T.font(13), text_color=T.TEXT, anchor="w", justify="left",
-                               fg_color=T.CARD, corner_radius=12, height=60)
+        ctk.CTkLabel(bottom, text="WYSYŁASZ DO", font=T.title_font(13), text_color=T.FAINT, anchor="w").pack(fill="x")
+        self.up = ctk.CTkLabel(bottom, text="", font=T.font(13), text_color=T.TEXT, anchor="w", justify="left",
+                               fg_color=T.CARD, corner_radius=12, height=44)
         self.up.pack(fill="x", pady=(4, 12), ipadx=14, ipady=8)
-        ctk.CTkLabel(self, text="OSTATNIO POBRANE", font=T.title_font(13), text_color=T.FAINT, anchor="w").pack(fill="x")
-        self.recent = ctk.CTkLabel(self, text="", font=T.font(13), text_color=T.MUTED, anchor="w", justify="left",
-                                   fg_color=T.CARD, corner_radius=12, height=60)
+        autowrap(self.up, bottom, 60)
+        ctk.CTkLabel(bottom, text="OSTATNIO POBRANE", font=T.title_font(13), text_color=T.FAINT,
+                     anchor="w").pack(fill="x")
+        self.recent = ctk.CTkLabel(bottom, text="", font=T.font(13), text_color=T.MUTED, anchor="w", justify="left",
+                                   fg_color=T.CARD, corner_radius=12, height=44)
         self.recent.pack(fill="x", pady=(4, 0), ipadx=14, ipady=8)
         self.refresh()
 
@@ -92,9 +97,11 @@ class TransfersView(ctk.CTkFrame):
 
         names = {p.ip: p.name for p in node.players.all() if p.ip}
         ups = sorted(eng.uploading.items(), key=lambda x: -x[1])
-        self.up.configure(text="   ·   ".join(f"{names.get(ip, ip)}  {fmt_speed(sp)}" for ip, sp in ups)
-                          if ups else "Teraz nikt od ciebie nie pobiera.",
+        text = "   ·   ".join(f"{T.shorten(names.get(ip, ip), 20)}  {fmt_speed(sp)}" for ip, sp in ups[:6])
+        if len(ups) > 6:
+            text += f"   ·   i {len(ups) - 6} więcej ({fmt_speed(sum(sp for _, sp in ups[6:]))})"
+        self.up.configure(text=text if ups else "Teraz nikt od ciebie nie pobiera.",
                           text_color=T.TEXT if ups else T.MUTED)
-        recent = list(node.recent)[-4:][::-1]
+        recent = list(node.recent)[-3:][::-1]
         self.recent.configure(text="\n".join(f"{when}   {name}" for when, name in recent) if recent
                               else "Jeszcze nic w tej sesji.")

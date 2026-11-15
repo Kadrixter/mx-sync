@@ -27,9 +27,11 @@ BORDER = "#262930"
 FAINT = "#5d616b"
 
 # rodzaje modów: znaczek ASCII i kolor
-KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT),
-              "Malowanie": ("%", YELLOW), "Opony": ("o", "#c9ccd3"),
-              "Kask": ("^", CYAN), "Strój": ("~", GREEN), "Rider": ("@", PURPLE), "Inne": ("*", MUTED)}
+KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT), "Malowanie": ("%", YELLOW),
+              "Opony": ("o", "#c9ccd3"), "Kask": ("^", CYAN), "Gogle": ("8", CYAN), "Strój": ("~", GREEN),
+              "Rękawice": ("w", GREEN), "Buty": ("L", PURPLE), "Ochraniacze": ("=", PURPLE),
+              "Postać": ("@", PURPLE), "Animacje": ("&", ORANGE), "Kamerka": ("c", ORANGE),
+              "Font": ("f", MUTED), "Inne": ("*", MUTED)}
 
 
 def percent_color(p):
@@ -77,8 +79,17 @@ def button(master, text, command=None, kind="secondary", **kw):
     kw.setdefault("height", 34)
     kw.setdefault("corner_radius", 8)
     kw.setdefault("font", font(13, "bold" if kind == "primary" else "normal"))
-    return ctk.CTkButton(master, text=text, command=command, fg_color=fg,
-                         hover_color=hover, text_color=txt, **kw)
+    b = ctk.CTkButton(master, text=text, command=command, fg_color=fg,
+                      hover_color=hover, text_color=txt, text_color_disabled=FAINT, **kw)
+    b.mx_fg = fg
+    return b
+
+
+def enable(btn, on):
+    """Włącz / wyłącz przycisk; wyłączony ma szare tło (czytelnie widać, że nie da się kliknąć)."""
+    state = "normal" if on else "disabled"
+    if btn.cget("state") != state:
+        btn.configure(state=state, fg_color=getattr(btn, "mx_fg", ROW) if on else ROW)
 
 
 def lerp_color(c1, c2, t):

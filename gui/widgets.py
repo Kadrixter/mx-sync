@@ -1,4 +1,4 @@
-"""Własne widgety: animowany pasek postępu i kółko z procentem."""
+"""Własne widgety: pasek postępu, kółko z procentem, wyszukiwarka, filtry, zawijany wiersz."""
 import tkinter as tk
 
 import customtkinter as ctk
@@ -176,3 +176,103 @@ class MinHolders(ctk.CTkFrame):
                                            text_color=T.TEXT)
         self.menu.set(str(max(1, min(5, int(value)))))
         self.menu.pack(side="left", padx=(6, 0))
+
+
+class FlowRow(ctk.CTkFrame):
+    """Wiersz z elementami po lewej i po prawej. Gdy okno jest za wąskie, prawa część schodzi
+    do drugiej linii (zamiast nachodzić na lewą albo znikać za krawędzią)."""
+
+    def __init__(self, master, gap=8):
+        super().__init__(master, fg_color="transparent")
+        self.gap = gap
+        self.line1 = ctk.CTkFrame(self, fg_color="transparent")
+        self.line1.pack(fill="x")
+        self.line2 = ctk.CTkFrame(self, fg_color="transparent")
+        self.left = ctk.CTkFrame(self, fg_color="transparent")       # elementy dodawać do .left / .right
+        self.right = ctk.CTkFrame(self, fg_color="transparent")
+        self.left.pack(in_=self.line1, side="left")
+        self.right.pack(in_=self.line1, side="right")
+        self._wrapped = False
+        self.bind("<Configure>", lambda e: self.after_idle(self._layout))
+
+    def _layout(self):
+        if not self.winfo_exists():
+            return
+        need = self.left.winfo_reqwidth() + self.right.winfo_reqwidth() + 3 * self.gap
+        wrap = need > self.winfo_width() > 1
+        if wrap == self._wrapped:
+            return
+        self._wrapped = wrap
+        self.right.pack_forget()
+        if wrap:
+            self.line2.pack(fill="x", pady=(self.gap, 0))
+            self.right.pack(in_=self.line2, side="left")
+        else:
+            self.line2.pack_forget()
+            self.right.pack(in_=self.line1, side="right")
+
+    def relayout(self):
+        """Po zmianie zawartości (np. dłuższe etykiety) – sprawdź jeszcze raz, czy się mieści."""
+        self._wrapped = None
+        self.after_idle(self._layout)
+
+
+class Dropdown(ctk.CTkOptionMenu):
+    """Rozwijane menu w stylu aplikacji."""
+
+    def __init__(self, master, values, command, width=180):
+        super().__init__(master, values=values, command=command, width=width, height=30, dynamic_resizing=False,
+                         font=T.font(12), dropdown_font=T.font(12), fg_color=T.CARD, button_color=T.ROW_HOVER,
+                         button_hover_color=T.TRACK, dropdown_fg_color=T.CARD, dropdown_hover_color=T.ROW_HOVER,
+                         text_color=T.TEXT, dropdown_text_color=T.TEXT, corner_radius=8)
+
+
+class KindFilter(ctk.CTkFrame):
+    """Filtr rodzaju: główne kategorie (Mapy, Motory, …, Postacie) + rozwijane menu rodzajów postaci
+    (kaski, buty, stroje…), widoczne po wybraniu „Postacie”. on_change(zakres) – zakres jak w mods.kind_in."""
+
+    def __init__(self, master, on_change):
+        from core.mods import CHARACTER_KINDS, CHARACTERS, FILTERS, KIND_PLURAL
+        super().__init__(master, fg_color="transparent")
+        self._on_change = on_change
+        self._chars = CHARACTERS
+        self._filters = FILTERS
+        self._sub = [("", "wszystkie postacie")] + [(k, KIND_PLURAL[k].lower()) for k in CHARACTER_KINDS]
+        self.seg = ctk.CTkSegmentedButton(self, values=[v for _, v in FILTERS], command=self._main,
+                                          font=T.font(12), height=28, fg_color=T.BG,
+                                          selected_color=T.ROW_HOVER, selected_hover_color=T.ROW_HOVER,
+                                          unselected_color=T.BG, unselected_hover_color=T.CARD,
+                                          text_color=T.TEXT)
+        self.seg.set(FILTERS[0][1])
+        self.seg.pack(side="left")
+        self.sub = Dropdown(self, [v for _, v in self._sub], self._subkind, width=170)
+        self.sub.set(self._sub[0][1])
+
+    def _main(self, value):
+        scope = next(k for k, v in self._filters if v == value)
+        if scope == self._chars:
+            self.sub.set(self._sub[0][1])
+            self.sub.pack(side="left", padx=(8, 0))
+        else:
+            self.sub.pack_forget()
+        self._on_change(scope)
+        self._relayout_parent()
+
+    def _subkind(self, value):
+        kind = next(k for k, v in self._sub if v == value)
+        self._on_change(kind or self._chars)
+
+    def _relayout_parent(self):
+        w = self.master
+        while w is not None:
+            if isinstance(w, FlowRow):
+                w.relayout()
+                return
+            w = getattr(w, "master", None)
+
+
+def autowrap(label, container, minus=40):
+    """Etykieta zawija tekst do szerokości kontenera (długie opisy nie uciekają za krawędź)."""
+    def fit(e):
+        label.configure(wraplength=max(200, e.width - minus))
+    container.bind("<Configure>", fit, add="+")

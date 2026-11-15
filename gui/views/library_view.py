@@ -3,12 +3,11 @@ import os
 
 import customtkinter as ctk
 
-from core.mods import KIND_GROUPS, KIND_PLURAL
+from core.mods import FILTERS, kind_in
 from gui import theme as T
 from gui.mod_table import ModTable
 from gui.rows import build_rows, filter_mods, players_text
-from gui.views.mods_view import KINDS
-from gui.widgets import AnimatedProgressBar, MinHolders, SearchBox
+from gui.widgets import AnimatedProgressBar, FlowRow, KindFilter, MinHolders, SearchBox, autowrap
 from utils.fmt import fmt_size, plural_mods
 
 
@@ -20,31 +19,29 @@ class LibraryView(ctk.CTkFrame):
 
         head = ctk.CTkFrame(self, fg_color=T.CARD, corner_radius=14)
         head.pack(fill="x", pady=(0, 12))
-        top = ctk.CTkFrame(head, fg_color="transparent")
+        top = FlowRow(head)
         top.pack(fill="x", padx=18, pady=(14, 4))
-        ctk.CTkLabel(top, text="Moja biblioteka", font=T.title_font(26), text_color=T.TEXT).pack(side="left")
-        T.button(top, "Skanuj ponownie", app.node.rescan, width=140).pack(side="right")
-        T.button(top, "Otwórz folder", self._open, width=120).pack(side="right", padx=8)
-        T.button(top, "Zmień folder", app.open_settings, width=120).pack(side="right")
-        self.folder = ctk.CTkLabel(head, text="", font=T.font(12), text_color=T.MUTED, anchor="w")
+        ctk.CTkLabel(top.left, text="Moja biblioteka", font=T.title_font(26), text_color=T.TEXT).pack(side="left")
+        T.button(top.right, "Skanuj ponownie", app.node.rescan, width=140).pack(side="right")
+        T.button(top.right, "Otwórz folder", self._open, width=120).pack(side="right", padx=8)
+        T.button(top.right, "Zmień folder", app.open_settings, width=120).pack(side="right")
+        self.folder = ctk.CTkLabel(head, text="", font=T.font(12), text_color=T.MUTED, anchor="w", justify="left")
         self.folder.pack(fill="x", padx=18)
-        self.stats = ctk.CTkLabel(head, text="", font=T.font(13, "bold"), text_color=T.TEXT, anchor="w")
+        self.stats = ctk.CTkLabel(head, text="", font=T.font(13, "bold"), text_color=T.TEXT, anchor="w",
+                                  justify="left")
         self.stats.pack(fill="x", padx=18, pady=(4, 0))
-        self.scan_lbl = ctk.CTkLabel(head, text="", font=T.font(12), text_color=T.ACCENT2, anchor="w")
+        self.scan_lbl = ctk.CTkLabel(head, text="", font=T.font(12), text_color=T.ACCENT2, anchor="w",
+                                     justify="left")
+        for lbl in (self.folder, self.stats, self.scan_lbl):
+            autowrap(lbl, head, 40)
         self.bar = AnimatedProgressBar(head, height=10, bg=T.CARD)
         ctk.CTkFrame(head, fg_color="transparent", height=10).pack(side="bottom")
 
-        filt = ctk.CTkFrame(self, fg_color="transparent")
+        filt = FlowRow(self)
         filt.pack(fill="x", pady=(0, 8))
         self.kind, self.min_holders = "", 1
-        self.kinds = ctk.CTkSegmentedButton(filt, values=[k for _, k in KINDS], command=self._kind_clicked,
-                                            font=T.font(12), height=28, fg_color=T.BG,
-                                            selected_color=T.ROW_HOVER, selected_hover_color=T.ROW_HOVER,
-                                            unselected_color=T.BG, unselected_hover_color=T.CARD,
-                                            text_color=T.TEXT)
-        self.kinds.set("Wszystko")
-        self.kinds.pack(side="left")
-        self.search = SearchBox(filt, lambda: self.refresh(force=True), "szukaj w moich modach…")
+        KindFilter(filt.left, self._kind_clicked).pack(side="left")
+        self.search = SearchBox(filt.right, lambda: self.refresh(force=True), "szukaj w moich modach…")
         self.search.pack(side="right")
         MinHolders(self, 1, self._min_changed).pack(anchor="e", pady=(0, 8))
         self.table = ModTable(self, checkable=False, empty="Brak modów w folderze")
@@ -62,9 +59,11 @@ class LibraryView(ctk.CTkFrame):
                               text_color=T.RED if lib.error else T.MUTED)
         mods = lib.snapshot()
         per_kind = {}
-        for m in mods.values():
-            per_kind[m.kind] = per_kind.get(m.kind, 0) + 1
-        kinds = "   ".join(f"{KIND_PLURAL[k].lower()} {per_kind[k]}" for k, _ in KIND_GROUPS if k in per_kind)
+        for scope, label in FILTERS[1:]:
+            n = sum(1 for m in mods.values() if kind_in(m.kind, scope))
+            if n:
+                per_kind[label.lower()] = n
+        kinds = "   ".join(f"{k} {n}" for k, n in per_kind.items())
         self.stats.configure(text=f"{plural_mods(len(mods))}  ·  {fmt_size(sum(m.size for m in mods.values()))}"
                                   + (f"   ·   {kinds}" if kinds else ""))
         if lib.error:
@@ -102,8 +101,8 @@ class LibraryView(ctk.CTkFrame):
             self.table.empty = ("Nic nie pasuje do filtra :/" if hidden else "Brak modów w folderze")
             self.table.set_rows(rows)
 
-    def _kind_clicked(self, value):
-        self.kind = next(k for k, v in KINDS if v == value)
+    def _kind_clicked(self, scope):
+        self.kind = scope
         self.refresh(force=True)
 
     def _min_changed(self, value):

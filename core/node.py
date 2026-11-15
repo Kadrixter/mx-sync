@@ -15,7 +15,7 @@ from core.compare import holders
 from core.discovery import Beacon
 from core.engine import Engine
 from core.library import Library, save_path_for, torrent_ih
-from core.mods import safe_path, scan_one
+from core.mods import belongs_to_mod, kind_in, mod_kind, safe_path, scan_one
 from core.players import Players
 from core.protocol import MAGIC, PROTO, parse_address
 from utils import config
@@ -58,6 +58,7 @@ class Node:
         self._reconnect = threading.Event()  # ktoś nowy online – dołącz go do pobierań od razu
         self.verifying = False
         self.verified_at = None     # godzina ostatniego sprawdzenia integralności
+        self.verified_scope = ""    # zakres ostatniego sprawdzenia (rodzaj modów)
         self.engine.set_limits(self.cfg["max_up"], self.cfg["max_down"])
 
     # ---------- ustawienia ----------
@@ -90,9 +91,11 @@ class Node:
             self.library.rev += 1
             self.rescan()
 
-    def verify(self):
+    def verify(self, scope=""):
+        """Sprawdzanie integralności: sumy modów z zakresu (rodzaj albo CHARACTERS; '' – wszystko) od nowa."""
         if not self.library.scanning:
-            self.rescan(force=True)
+            self.verified_scope = scope
+            self.rescan(force=(lambda lm: kind_in(mod_kind(lm.key), scope)) if scope else True)
 
     def ignore_conflicts(self, pairs):
         """Pomiń konflikty (klucz modu, infohash jego wersji) – nie będą proponowane do pobrania."""
@@ -296,6 +299,8 @@ def _remove_extra_files(root, t):
         for d, _, files in os.walk(path):
             for f in files:
                 p = os.path.join(d, f)
+                if not belongs_to_mod(os.path.relpath(p, path)):
+                    continue                # malowania / rękawice / gogle to osobne mody – nie ruszamy
                 if os.path.normcase(p) not in keep:
                     os.remove(p)
     except (OSError, ValueError, RuntimeError):

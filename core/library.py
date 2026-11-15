@@ -11,7 +11,7 @@ import threading
 
 import libtorrent as lt
 
-from core.mods import STAGE_NAMES, mod_kind, mod_name, safe_path, scan_mods, scan_one, scan_stage
+from core.mods import STAGE_NAMES, belongs_to_mod, mod_kind, mod_name, safe_path, scan_mods, scan_one, scan_stage
 from utils.config import DATA_DIR
 
 TORRENTS = DATA_DIR / "torrents"
@@ -38,6 +38,9 @@ class Mod:
 def make_torrent(path, progress=None):
     """Tworzy prywatny torrent v2 dla pliku albo folderu; zwraca surowe bajty .torrent."""
     files = lt.list_files(path)
+    if os.path.isdir(path):
+        # nazwy w torrencie zaczynają się od nazwy folderu modu: 'neuro\paints\x.pnt'
+        files = [e for e in files if belongs_to_mod(e.filename.replace("\\", "/").split("/", 1)[-1])]
     t = lt.create_torrent(files, 0, lt.create_torrent.v2_only)
     t.set_priv(True)
     t.set_creator("MX Sync")
@@ -129,7 +132,8 @@ class Library:
 
         on_mod(Mod, path) – mod gotowy (od razu udostępnij); on_event(tytuł, tekst) – komunikat.
         skip – mody właśnie pobierane (pliki niekompletne – nie liczymy ich ani nie usuwamy).
-        force – licz wszystko od nowa, bez pamięci (sprawdzanie integralności)."""
+        force – licz od nowa, bez pamięci (sprawdzanie integralności): True – wszystko,
+                funkcja(Mod lokalny -> bool) – tylko pasujące mody (np. jeden rodzaj)."""
         self.root, self.error, self.scanning = root, None, True
         self.changed = []
         self._stop.clear()
@@ -139,11 +143,12 @@ class Library:
                 self.error = "Nie znaleziono folderu modów – ustaw go w Ustawieniach"
                 return
             local = scan_mods(root, self._stop)
-            todo = [m for m in local.values() if force or self._cache.get(m.key, {}).get("sig") != m.signature()]
+            forced = (force if callable(force) else (lambda lm: True)) if force else (lambda lm: False)
+            todo = [m for m in local.values() if forced(m) or self._cache.get(m.key, {}).get("sig") != m.signature()]
             self.to_hash = len(todo)
             first = not self._cache
             if force:
-                event("Sprawdzam integralność", f"Liczę od nowa {len(local)} modów – program może chwilę zwolnić")
+                event("Sprawdzam integralność", f"Liczę od nowa {len(todo)} modów – program może chwilę zwolnić")
             elif first and local:
                 event("Pierwsze uruchomienie", f"Przygotowuję {len(local)} modów do udostępniania (rider, opony, "
                                                "misc, motory, mapy) – to potrwa, program może chwilę zwolnić")
@@ -165,7 +170,7 @@ class Library:
                     if lm.key in skip:
                         found[lm.key] = self.mods.get(lm.key)
                         continue
-                    mod = self._mod_for(lm, force)
+                    mod = self._mod_for(lm, forced(lm))
                     if not mod:
                         continue
                     found[mod.key] = mod

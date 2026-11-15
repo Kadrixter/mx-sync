@@ -44,7 +44,7 @@ class TopBar(ctk.CTkFrame):
         node = self.app.node
         lib = node.library
         mods = lib.snapshot()
-        self.me.configure(text=f"Ty: {node.name}")
+        self.me.configure(text=f"Ty: {T.shorten(node.name, 24)}")
         self.me_sub.configure(text=f"{plural_mods(len(mods))}  ·  {fmt_size(sum(m.size for m in mods.values()))}"
                                    f"  ·  udostępniasz wszystko")
         if lib.error:

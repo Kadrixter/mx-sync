@@ -104,13 +104,16 @@ class Sidebar(ctk.CTkFrame):
         for n in self.nav.values():
             n.pack(fill="x", padx=10, pady=1)
         self.players_hdr = _section(self, "GRACZE")
+        # przycisk pakowany przed listą graczy (od dołu) – przy niskim oknie kurczy się lista, nie przycisk
+        T.button(self, "+  Dodaj gracza po IP", app.add_player_dialog, height=36).pack(
+            side="bottom", fill="x", padx=14, pady=12)
         self.list = ctk.CTkScrollableFrame(self, fg_color="transparent", scrollbar_button_color=T.CARD,
                                            scrollbar_button_hover_color=T.ROW_HOVER)
         self.list.pack(fill="both", expand=True, padx=4)
         self.empty = ctk.CTkLabel(self.list, text="Szukam graczy w sieci (LAN, Radmin VPN)…\n"
                                                   "Inni muszą mieć włączony MX Sync.",
                                   font=T.font(12), text_color=T.MUTED, justify="left")
-        T.button(self, "+  Dodaj gracza po IP", app.add_player_dialog, height=36).pack(fill="x", padx=14, pady=12)
+
 
     def _conflicts(self):
         """Liczba nierozwiązanych konfliktów – liczona tylko gdy coś się zmieniło."""
