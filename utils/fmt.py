@@ -39,3 +39,12 @@ def plural_files(n):
 
 def plural_mods(n):
     return _plural(n, "mod", "mody", "modów")
+
+
+def plural_people(n):
+    return _plural(n, "osoba", "osoby", "osób")
+
+
+def players_gen(n):
+    """'od 1 gracza', 'od 3 graczy'."""
+    return "1 gracza" if n == 1 else f"{n} graczy"

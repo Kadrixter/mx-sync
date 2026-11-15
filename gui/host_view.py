@@ -421,7 +421,10 @@ class HostRunView(View):
             r["speed"].configure(text="✔ gotowe" if done else fmt_speed(s["speed"]),
                                  text_color=T.GREEN if done else T.ACCENT)
             cur = f"  •  {T.shorten(s['current'], 60)}" if s["current"] else ""
-            r["info"].configure(text=f"{sizes}  •  {plural_files(s['files_done'])}{cur}")
+            p2p = s.get("progress", 0) - s["sent"]
+            p2p = f"  •  od innych graczy (P2P): {fmt_size(p2p)}" if p2p > 0 else ""
+            r["info"].configure(text=f"{sizes}  •  od Ciebie: {fmt_size(s['sent'])}{p2p}  •  "
+                                     f"{plural_files(s['files_done'])}{cur}")
         if snap:
             self.no_transfers.pack_forget()
         else:

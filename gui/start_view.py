@@ -157,6 +157,10 @@ class StartView(View):
     # ----- animacja -----
 
     def _tick(self):
+        if self.app.update_dialog is not None and not self.leaving:
+            # okno aktualizacji na wierzchu – animacja pod spodem stoi (bez migania i zbędnego CPU)
+            self._job = self.after(100, self._tick)
+            return
         self.t += 1
         w, h, slant, _, _ = self._geom()
         if self.leaving:

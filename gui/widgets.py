@@ -120,7 +120,7 @@ class SelectableList(ctk.CTkScrollableFrame):
     # ----- elementy -----
 
     def add(self, key, name, is_dir, size=None, checked=False, badge=None, icon=None,
-            badge_color=None, enabled=True, sub=None):
+            badge_color=None, enabled=True, sub=None, note=""):
         if key in self._rows:
             return
         self._empty.pack_forget()
@@ -149,6 +149,10 @@ class SelectableList(ctk.CTkScrollableFrame):
                                    text_color=T.MUTED)
             sub_lbl.pack(side="left", padx=(8, 0))
             widgets.append(sub_lbl)
+        # mała zielona notka (np. „👥 2 osoby mają tego moda”) – zmieniana przez set_note()
+        note_lbl = ctk.CTkLabel(row, text=note, anchor="w", font=T.font(11), text_color=T.GREEN)
+        note_lbl.pack(side="left", padx=(10, 0))
+        widgets.append(note_lbl)
         size_lbl = ctk.CTkLabel(row, text=fmt_size(size), width=95, anchor="e",
                                 font=T.font(12), text_color=T.MUTED)
         size_lbl.pack(side="right", padx=(6, 14))
@@ -160,7 +164,7 @@ class SelectableList(ctk.CTkScrollableFrame):
         if cb and enabled:
             for w in widgets:
                 w.bind("<Button-1>", lambda e, c=cb: c.toggle())
-        self._rows[key] = {"frame": row, "var": var, "size": size, "size_lbl": size_lbl,
+        self._rows[key] = {"frame": row, "var": var, "size": size, "size_lbl": size_lbl, "note": note_lbl,
                            "is_dir": is_dir, "name": name, "enabled": enabled}
 
     def add_header(self, text, count_text="", button_text=None, command=None):
@@ -203,6 +207,11 @@ class SelectableList(ctk.CTkScrollableFrame):
         if r:
             r["size"] = size
             r["size_lbl"].configure(text=fmt_size(size))
+
+    def set_note(self, key, text):
+        r = self._rows.get(key)
+        if r and r["note"].cget("text") != text:
+            r["note"].configure(text=text)
 
     def clear(self, empty_text=""):
         for r in self._rows.values():

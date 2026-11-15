@@ -17,8 +17,8 @@ from urllib.parse import quote
 import requests
 from requests.adapters import HTTPAdapter
 
-from net.client import local_path
-from net.protocol import CHUNK, HDR_AUTH
+from net.client import local_path, mod_key
+from net.protocol import CHUNK
 from utils.config import CLIENT_CACHE
 from utils.fmt import fmt_size
 from utils.hashing import Cancelled, HashCache, md5_file
@@ -137,6 +137,66 @@ class _Task:
                 os.remove(p)
             except OSError:
                 pass
+
+
+def ask_have(sess, base, body, headers, timeout=(2, 10)):
+    """Pyta gracza (serwer P2P), które z plików ma; None = nie odpowiada."""
+    try:
+        r = sess.post(base + "/have", json=body, headers=headers, timeout=timeout)
+        return set(r.json()) if r.status_code == 200 else set()
+    except (requests.RequestException, ValueError, TypeError):
+        return None
+
+
+class PeerScan(threading.Thread):
+    """W tle co INTERVAL s sprawdza, ilu innych graczy ma każdy mod hosta (cały, aktualny)."""
+    INTERVAL = 15.0
+
+    def __init__(self, conn, index):
+        super().__init__(daemon=True)
+        self.conn = conn
+        self.body = [{"rel": r, "size": int(v["size"]), "hash": v["hash"]} for r, v in index.items()]
+        self.files_per_mod = {}
+        for r in index:
+            k = mod_key(r)
+            self.files_per_mod[k] = self.files_per_mod.get(k, 0) + 1
+        self.counts = {}            # klucz modu -> ilu graczy go ma
+        self.peers = []             # nazwy graczy z P2P, którzy odpowiedzieli
+        self.gen = 0                # rośnie po każdej zmianie wyników
+        self.stop = threading.Event()
+
+    def cancel(self):
+        self.stop.set()
+
+    def run(self):
+        sess = requests.Session()
+        try:
+            while not self.stop.is_set() and not self.conn._closed.is_set():
+                self._scan(sess)
+                self.stop.wait(self.INTERVAL)
+        finally:
+            sess.close()
+
+    def _scan(self, sess):
+        headers = self.conn.headers()
+        counts, names = {}, []
+        for p in self.conn.peers():
+            if self.stop.is_set():
+                return
+            have = ask_have(sess, f"http://{p['ip']}:{p['port']}", self.body, headers, timeout=(2, 30))
+            if have is None:
+                continue
+            names.append(str(p.get("name") or p["ip"]))
+            per = {}
+            for r in have:
+                k = mod_key(r)
+                per[k] = per.get(k, 0) + 1
+            for k, n in per.items():
+                if n == self.files_per_mod.get(k):
+                    counts[k] = counts.get(k, 0) + 1
+        if counts != self.counts or names != self.peers:
+            self.counts, self.peers = counts, names
+            self.gen += 1
 
 
 class DownloadJob(threading.Thread):
@@ -261,7 +321,7 @@ class DownloadJob(threading.Thread):
         if self._peer_sess is None:
             self._peer_sess = requests.Session()
             self._peer_sess.mount("http://", HTTPAdapter(pool_connections=8, pool_maxsize=16))
-        headers = {k: v for k, v in self.conn.headers().items() if k == HDR_AUTH}
+        headers = self.conn.headers()          # hasło hosta + moja nazwa (gracz widzi, kto od niego pobiera)
         me = self.conn.peer.port if self.conn.peer else None
         known = {s.key: s for s in self.sources if s.key}
         body = [{"rel": f.rel, "size": f.size, "hash": f.hash} for f in todo]
@@ -270,10 +330,8 @@ class DownloadJob(threading.Thread):
             if p["ip"].startswith("127.") and p["port"] == me:
                 continue
             base = f"http://{key}"
-            try:
-                r = self._peer_sess.post(base + "/have", json=body, headers=headers, timeout=(2, 10))
-                have = set(r.json()) if r.status_code == 200 else set()
-            except (requests.RequestException, ValueError, TypeError):
+            have = ask_have(self._peer_sess, base, body, headers)
+            if have is None:
                 continue
             src = known.get(key)
             if src:

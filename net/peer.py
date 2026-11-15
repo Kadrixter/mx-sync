@@ -15,10 +15,11 @@ import re
 import socket
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from net.protocol import HDR_AUTH, PEER_PORT
+from net.protocol import HDR_AUTH, HDR_CLIENT, PEER_PORT
 from utils.config import CLIENT_CACHE
 from utils.files import mods_rel, safe_join
 from utils.hashing import HashCache
@@ -26,6 +27,7 @@ from utils.speed import SpeedMeter
 
 SEND_CHUNK = 1024 * 1024
 MAX_UPLOADS = 6
+RECENT = 4.0                # ile sekund po ostatnim kawałku gracz liczy się jako „pobiera ode mnie”
 
 
 class _HttpServer(ThreadingHTTPServer):
@@ -47,6 +49,7 @@ class PeerServer:
         self._cache_mtime = None
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(MAX_UPLOADS)
+        self._takers = {}           # nazwa gracza -> [czas ostatniego kawałka, SpeedMeter]
         self._httpd = None
         self._stop = threading.Event()
 
@@ -72,6 +75,21 @@ class PeerServer:
                 httpd.shutdown()
                 httpd.server_close()
             threading.Thread(target=down, daemon=True).start()
+
+    def _taker(self, name):
+        with self._lock:
+            t = self._takers.get(name)
+            if t is None:
+                t = self._takers[name] = [time.monotonic(), SpeedMeter()]
+            t[0] = time.monotonic()
+            return t
+
+    def takers(self):
+        """[(nazwa, prędkość)] graczy, którzy właśnie pobierają ode mnie."""
+        now = time.monotonic()
+        with self._lock:
+            return sorted(((n, t[1].speed()) for n, t in self._takers.items() if now - t[0] < RECENT),
+                          key=lambda x: -x[1])
 
     def remember(self, path, st, md5):
         """Plik właśnie pobrany i zweryfikowany – od razu można go dawać innym."""
@@ -183,14 +201,15 @@ def _make_handler(peer):
                 return self._send(416, {"error": "zły zakres"})
             if not peer._slots.acquire(blocking=False):
                 return self._send(503, {"error": "zajęty"})
+            name = unquote(self.headers.get(HDR_CLIENT, "")) or self.client_address[0]
             try:
                 peer.uploads += 1
-                self._stream(fp, start, end, size)
+                self._stream(fp, start, end, size, peer._taker(name))
             finally:
                 peer.uploads -= 1
                 peer._slots.release()
 
-        def _stream(self, fp, start, end, size):
+        def _stream(self, fp, start, end, size, taker):
             self.send_response(206)
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
             self.send_header("Content-Type", "application/octet-stream")
@@ -205,6 +224,8 @@ def _make_handler(peer):
                         break
                     pos += sent
                     peer.meter.add(sent)
+                    taker[1].add(sent)
+                    taker[0] = time.monotonic()
                     with peer._lock:
                         peer.bytes_up += sent
             if pos <= end:

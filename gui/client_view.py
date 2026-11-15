@@ -12,12 +12,12 @@ from gui.mod_filter import GROUP_ICONS, ModFilterBar
 from gui.widgets import AnimatedProgressBar, PasswordDialog, SelectableList
 from net.client import KIND_GROUPS, AuthError, CheckJob, HostConnection, PasswordRequired
 from net.discovery import DiscoveryScanner
-from net.swarm import DownloadJob
+from net.swarm import DownloadJob, PeerScan
 from net.protocol import parse_address
 from utils import config
 from utils.config import CLIENT_CACHE
 from utils.files import find_mx_mods_folder, resolve_mods_root
-from utils.fmt import fmt_eta, fmt_size, fmt_speed, plural_files, plural_mods
+from utils.fmt import fmt_eta, fmt_size, fmt_speed, players_gen, plural_files, plural_mods, plural_people
 from utils.hashing import HashCache
 from utils.netinfo import is_radmin_ip, radmin_available
 
@@ -29,6 +29,18 @@ KIND_PLURAL = dict(KIND_GROUPS)
 STATUS_ORDER = {"brakuje": 0, "nieaktualny": 1, "aktualny": 2}
 STATUS_BADGES = {"brakuje": ("BRAKUJE", T.ORANGE), "nieaktualny": ("NIEAKTUALNY", T.YELLOW),
                  "aktualny": ("✔ AKTUALNY", T.GREEN)}
+
+
+def upload_text(peer):
+    """Co wysyłam innym graczom (P2P) – nazwy i prędkości."""
+    if peer is None:
+        return ""
+    takers = peer.takers()
+    if not takers:
+        return f"⇅ P2P włączone – inni gracze mogą pobierać od Ciebie  •  wysłano łącznie {fmt_size(peer.bytes_up)}"
+    who = ",  ".join(f"{T.shorten(n, 16)} {fmt_speed(sp)}" for n, sp in takers[:4])
+    return (f"⬆ Wysyłasz do {players_gen(len(takers))} ({fmt_speed(sum(sp for _, sp in takers))}):  {who}"
+            f"  •  wysłano łącznie {fmt_size(peer.bytes_up)}")
 
 
 def _badges(master, host):
@@ -203,6 +215,8 @@ class ClientSyncView(View):
         self._poll_job = None
         self._p2p_job = None
         self._group_btns = {}        # rodzaj -> przycisk „Zaznacz grupę”
+        self.scan = None             # PeerScan – ilu graczy ma każdy mod
+        self._scan_gen = -1
         if conn.peer:
             conn.peer.folder = self.folder
 
@@ -305,11 +319,20 @@ class ClientSyncView(View):
         if peer is None:
             text = "P2P niedostępne (stary host)" if self.conn.legacy else "P2P wyłączone (brak wolnego portu)"
         else:
-            text = f"⇅ P2P: udostępniasz swoje mody innym  •  wysłano {fmt_size(peer.bytes_up)}"
-            if peer.uploads:
-                text += f"  •  teraz {fmt_speed(peer.meter.speed())}"
+            text = upload_text(peer)
         self.p2p_lbl.configure(text=text, text_color=T.CYAN if peer else T.MUTED)
+        scan = self.scan
+        if scan and scan.gen != self._scan_gen:
+            self._scan_gen = scan.gen
+            for k in self.list.keys():
+                self.list.set_note(k, self._peer_note(k))
         self._p2p_job = self.after(1000, self._p2p_tick)
+
+    def _peer_note(self, key):
+        n = self.scan.counts.get(key, 0) if self.scan else 0
+        if not n:
+            return ""
+        return f"👥 {plural_people(n)} {'ma' if n == 1 else 'mają'} tego moda"
 
     def _parallel(self):
         try:
@@ -363,7 +386,8 @@ class ClientSyncView(View):
             sub = g.kind + (f"  •  {g.path}" if g.path else "")
             self.list.add(g.key, g.name, True, size=g.todo_size if g.todo else g.size,
                           checked=g.key in self.sel, badge=badge, badge_color=color,
-                          icon=KIND_ICONS.get(g.kind, "📦"), enabled=bool(g.todo), sub=sub)
+                          icon=KIND_ICONS.get(g.kind, "📦"), enabled=bool(g.todo), sub=sub,
+                          note=self._peer_note(g.key))
         if len(mods) > MAX_MOD_ROWS:
             rest = mods[MAX_MOD_ROWS:]
             chosen = sum(1 for g in rest if g.key in self.sel)
@@ -446,6 +470,7 @@ class ClientSyncView(View):
         self._new_list(True, "Sprawdzam mody…")
         self.bar.set_color(None)
         self.bar.set_indeterminate()
+        self._stop_scan()
         self.job = CheckJob(self.conn, self.folder)
         self.job.start()
         self._poll()
@@ -499,6 +524,9 @@ class ClientSyncView(View):
 
         total = sum(v["size"] for v in job.index.values())
         self.mods = job.mods
+        if self.conn.peer:
+            self.scan = PeerScan(self.conn, job.index)
+            self.scan.start()
         needed = self._needed()
         self.bar.set(1.0)
         self.stats_lbl.configure(text=f"Host udostępnia {len(self.mods)} modów ({plural_files(len(job.index))}, "
@@ -539,10 +567,17 @@ class ClientSyncView(View):
         self.conn.close()
         self.app.show(ClientServersView)
 
+    def _stop_scan(self):
+        if self.scan:
+            self.scan.cancel()
+            self.scan = None
+            self._scan_gen = -1
+
     def cleanup(self):
         for job_id in (self._poll_job, self._p2p_job):
             if job_id:
                 self.after_cancel(job_id)
+        self._stop_scan()
         if self.job and self.job.phase != "done":
             self.job.cancel()
 
@@ -620,7 +655,8 @@ class ClientDownloadView(View):
         self.bar.pack(fill="x", padx=16, pady=6)
         self.stats_lbl = ctk.CTkLabel(card, text="", font=T.font(12), text_color=T.MUTED, anchor="w")
         self.stats_lbl.pack(fill="x", padx=16)
-        self.src_lbl = ctk.CTkLabel(card, text="", font=T.font(12, "bold"), text_color=T.CYAN, anchor="w")
+        self.src_lbl = ctk.CTkLabel(card, text="", font=T.font(12, "bold"), text_color=T.CYAN, anchor="w",
+                                    justify="left")
         self.src_lbl.pack(fill="x", padx=16, pady=(2, 0))
 
         # sloty na pliki pobierane równolegle
@@ -690,20 +726,37 @@ class ClientDownloadView(View):
         else:
             self._poll_job = self.after(200, self._poll)
 
-    @staticmethod
-    def _sources_text(job):
-        """'Źródła: 🖥 host 10.1 MB/s  •  💻 Kuba-PC 6.2 MB/s' – P2P jak w torrencie."""
-        srcs = list(job.sources)
-        peers = [x for x in srcs if not x.is_host]
+    def _sources_text(self, job):
+        """Skąd pobieram (host + gracze, jak torrent) i komu wysyłam – żeby było widać, że P2P działa."""
+        if job.finished:
+            used = [x for x in job.sources if x.bytes > 0]
+            if not used:
+                return ""
+            n = len(used)
+            return (f"Pobrano z {n} {'źródła' if n == 1 else 'źródeł'}:   " + "   •   ".join(
+                ("🖥 host" if x.is_host else f"💻 {T.shorten(x.name, 18)}") + f" {fmt_size(x.bytes)}" for x in used))
+        srcs = [x for x in job.sources if not x.dead]
         if not srcs:
             return "Szukam źródeł…"
-        parts = []
-        for x in srcs:
-            icon = "🖥 host" if x.is_host else f"💻 {T.shorten(x.name, 18)}"
-            parts.append(icon + (" (rozłączony)" if x.dead else f" {fmt_speed(x.meter.speed())}"))
-        if not peers:
-            return "Źródło: " + parts[0] + "   •   brak innych graczy z tymi modami"
-        return f"Źródła ({len(srcs)}, P2P): " + "   •   ".join(parts)
+        peers = [x for x in srcs if not x.is_host]
+        total = sum(x.meter.speed() for x in srcs)
+        p2p = sum(x.meter.speed() for x in peers)
+        n = len(srcs)
+        line1 = f"⬇ Pobierasz z {n} {'źródła' if n == 1 else 'źródeł'}"
+        if peers:
+            line1 += f": host + {len(peers)} {'gracz' if len(peers) == 1 else 'graczy'}"
+            line1 += f"  •  łącznie {fmt_speed(total)}  •  od graczy (P2P) {fmt_speed(p2p)}"
+            if job.peer_bytes:
+                line1 += f", pobrano od nich {fmt_size(job.peer_bytes)}"
+        else:
+            line1 += f" (tylko host)  •  {fmt_speed(total)}  •  nikt inny w sieci nie ma tych modów"
+        parts = [("🖥 host" if x.is_host else f"💻 {T.shorten(x.name, 18)}") + f" {fmt_speed(x.meter.speed())}"
+                 for x in srcs]
+        lines = [line1, "      " + "   •   ".join(parts)] if peers else [line1]
+        up = upload_text(self.conn.peer)
+        if up:
+            lines.append(up)
+        return "\n".join(lines)
 
     def _sync_slots(self, active):
         free = [s for s in self._slots if s["file"] not in active]

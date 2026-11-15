@@ -32,6 +32,9 @@ Przy pierwszym uruchomieniu hosta Windows zapyta o zaporę – zezwól na dostę
   naraz z hosta i ze wszystkich tych graczy (gracze dołączający w trakcie też są dokładani jako źródła).
   Każdy plik jest na końcu sprawdzany MD5 – jeśli coś od innego gracza się nie zgadza, plik idzie od nowa z hosta.
   Udostępniane są tylko pliki zweryfikowane (nigdy `.part`), z tym samym hasłem co host.
+- widać, czy P2P działa: przy pobieraniu „Pobierasz z 3 źródeł: host + 2 graczy” z prędkością każdego źródła,
+  przy wysyłaniu „Wysyłasz do 2 graczy” (kto i z jaką prędkością), a na liście modów zielona notka
+  „👥 2 osoby mają tego moda”; host widzi, ile każdy klient dostał od innych graczy
 - sprawdzanie: hashuje tylko pliki o zgodnym rozmiarze, z cache – kolejne sprawdzenia trwają sekundy
 - pobieranie równoległe (1–8), animowane paski postępu, prędkość, pozostały czas, status każdego pliku
 - wznawianie przerwanych pobrań (pliki `.part`), automatyczne ponawianie, weryfikacja MD5, sprawdzanie miejsca na dysku

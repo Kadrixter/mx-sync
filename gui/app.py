@@ -48,6 +48,7 @@ class App(ctk.CTk):
             self.after(300, lambda: set_crisp_icon(self, icon))
         self._view = None
         self.update_info = None      # wynik cichego sprawdzenia aktualizacji przy starcie
+        self.update_dialog = None    # otwarte okno aktualizacji (najwyżej jedno)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.show(StartView)
 
@@ -60,7 +61,11 @@ class App(ctk.CTk):
 
     def open_updates(self, info=None):
         from gui.update_dialog import UpdateDialog
-        UpdateDialog(self, info)
+        if self.update_dialog is not None and self.update_dialog.winfo_exists():
+            self.update_dialog.lift()
+            self.update_dialog.focus_force()
+            return
+        self.update_dialog = UpdateDialog(self, info)
 
     def quit_app(self):
         self._on_close()
