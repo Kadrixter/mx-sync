@@ -36,6 +36,8 @@ Przy pierwszym uruchomieniu hosta Windows zapyta o zaporę – zezwól na dostę
   przy wysyłaniu „Wysyłasz do 2 graczy” (kto i z jaką prędkością), a na liście modów zielona notka
   „👥 2 osoby mają tego moda”; host widzi, ile każdy klient dostał od innych graczy
 - sprawdzanie: hashuje tylko pliki o zgodnym rozmiarze, z cache – kolejne sprawdzenia trwają sekundy
+- mody pobierają się po kolei (mod za modem, w kolejności z listy) – nie wszystkie naraz;
+  na ekranie pobierania widać „mod 2 / 7: nazwa”
 - pobieranie równoległe (1–8), animowane paski postępu, prędkość, pozostały czas, status każdego pliku
 - wznawianie przerwanych pobrań (pliki `.part`), automatyczne ponawianie, weryfikacja MD5, sprawdzanie miejsca na dysku
 

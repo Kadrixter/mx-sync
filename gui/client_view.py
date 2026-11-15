@@ -584,7 +584,8 @@ class ClientSyncView(View):
 
 class ClientDownloadView(View):
     STATUS_COLORS = {"gotowe": T.GREEN, "pobieranie": T.ACCENT, "błąd": T.RED,
-                     "ponawiam…": T.YELLOW, "przerwano": T.YELLOW, "weryfikuję": T.CYAN}
+                     "ponawiam…": T.YELLOW, "przerwano": T.YELLOW, "weryfikuję": T.CYAN,
+                     "w kolejce": T.MUTED}
 
     def __init__(self, app, conn, host, folder, files, parallel, intro=True):
         super().__init__(app)
@@ -707,7 +708,10 @@ class ClientDownloadView(View):
         self.speed_lbl.configure(text=fmt_speed(speed))
         eta = (total - done) / speed if speed > 1 else None
         fail = f"   •   błędy: {job.failed}" if job.failed else ""
-        self.stats_lbl.configure(text=f"{fmt_size(done)} / {fmt_size(total)}   •   "
+        cur, mods, name, mods_done = job.mod_progress()
+        mod = f"mod {cur} / {mods}: {T.shorten(name, 40)}   •   " if name and not job.finished else \
+            f"mody {mods_done} / {mods}   •   "
+        self.stats_lbl.configure(text=f"{mod}{fmt_size(done)} / {fmt_size(total)}   •   "
                                       f"pliki {job.files_done} / {len(job.files)}   •   "
                                       f"pozostało: {fmt_eta(eta)}{fail}")
         self.src_lbl.configure(text=self._sources_text(job))

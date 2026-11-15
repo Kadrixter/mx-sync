@@ -17,7 +17,7 @@ from urllib.parse import quote
 import requests
 from requests.adapters import HTTPAdapter
 
-from net.client import local_path, mod_key
+from net.client import KIND_GROUPS, local_path, mod_key, mod_kind
 from net.protocol import CHUNK
 from utils.config import CLIENT_CACHE
 from utils.fmt import fmt_size
@@ -80,6 +80,7 @@ class _Task:
         self.bad_hash = 0           # ile razy złożony plik miał zły MD5
         self.lock = threading.Lock()
         self.created = False
+        self.mod = 0                # numer modu w kolejce (mody pobierane po kolei)
 
     def piece_range(self, i):
         start = i * PIECE
@@ -205,7 +206,18 @@ class DownloadJob(threading.Thread):
     def __init__(self, conn, folder, files, parallel=3):
         super().__init__(daemon=True)
         self.conn, self.folder = conn, folder
-        self.files = sorted(files, key=lambda f: f.size, reverse=True)   # duże najpierw
+        # po kolei: mod za modem (w kolejności z listy: mapy, motory, opony…), w modzie duże pliki najpierw
+        order = {k: i for i, (k, _) in enumerate(KIND_GROUPS)}
+
+        def key(f):
+            k = mod_key(f.rel)
+            return order.get(mod_kind(k), 99), k.lower(), -f.size
+        self.files = sorted(files, key=key)
+        self.mod_keys = []          # mody w kolejności pobierania
+        for f in self.files:
+            k = mod_key(f.rel)
+            if not self.mod_keys or self.mod_keys[-1] != k:
+                self.mod_keys.append(k)
         self.parallel = max(1, min(8, parallel))
         self.total = sum(f.size for f in files)
         self.done_bytes = 0
@@ -228,6 +240,16 @@ class DownloadJob(threading.Thread):
     @property
     def active(self):
         return [t.f for t in self.tasks if t.inflight or t.verifying]
+
+    def mod_progress(self):
+        """(numer bieżącego modu od 1, ile modów, nazwa bieżącego, ile gotowych)."""
+        tasks = list(self.tasks)
+        left = {t.mod for t in tasks if not t.finished}
+        done = len(self.mod_keys) - len(left)
+        if not left:
+            return len(self.mod_keys), len(self.mod_keys), "", done
+        cur = min(left)
+        return cur + 1, len(self.mod_keys), self.mod_keys[cur].split("/")[-1], done
 
     @property
     def peer_bytes(self):
@@ -287,6 +309,8 @@ class DownloadJob(threading.Thread):
                 self.failed += 1
                 continue
             t = _Task(f, dest)
+            t.mod = self.mod_keys.index(mod_key(f.rel))
+            f.status = "w kolejce"
             try:
                 f.done = t.load()
             except OSError:
@@ -355,8 +379,17 @@ class DownloadJob(threading.Thread):
         """('piece', task, i) / ('verify', task) / ('wait',) / None (koniec dla tego źródła)."""
         with self.lock:
             useful = False
+            # mody po kolei: kawałki rozdajemy tylko z pierwszego modu, który ma jeszcze coś do
+            # rozdania – następny mod zaczyna się dopiero, gdy z bieżącego wszystko jest już w drodze
+            window = next((t.mod for t in self.tasks if t.free and not t.finished), None)
+            first = next((t.mod for t in self.tasks if not t.finished), 0)
+            if window is not None:
+                window = min(window, first + 1)     # najwyżej bieżący mod + początek następnego
             for t in self.tasks:
                 if t.finished or not src.can(t):
+                    continue
+                if t.free and t.mod > window:
+                    useful = True
                     continue
                 if t.free:
                     t.inflight += 1
