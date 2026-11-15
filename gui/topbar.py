@@ -51,7 +51,9 @@ class TopBar(ctk.CTkFrame):
             self.status.configure(text="  ustaw folder modów  ", text_color=T.RED)
         elif lib.scanning:
             d, t = lib.progress
-            self.status.configure(text=f"  przygotowuję mody {d}/{t}  ", text_color=T.ACCENT2)
+            stage = f"  ·  {lib.stage[2]}" if lib.stage else ""
+            what = "sprawdzam integralność" if node.verifying else "skanuję mody"
+            self.status.configure(text=f"  {what} {d}/{t}{stage}  ", text_color=T.ACCENT2)
         else:
             n = len(node.players.online())
             self.status.configure(text=f"  online  ·  {n} {'gracz' if n == 1 else 'graczy'}  ",

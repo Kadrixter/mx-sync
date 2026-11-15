@@ -1,10 +1,11 @@
 """Porównanie modów: z jednym graczem (mode="player") albo ze wszystkimi naraz (mode="all")."""
 import customtkinter as ctk
 
-from core.mods import KIND_GROUPS, KIND_PLURAL, mod_dir
+from core.mods import KIND_GROUPS
 from gui import theme as T
 from gui.mod_table import ModTable
-from gui.widgets import Ring
+from gui.rows import build_rows, filter_mods, players_text
+from gui.widgets import MinHolders, Ring, SearchBox
 from utils.fmt import fmt_size, plural_mods
 
 TABS_PLAYER = [("missing", "Brakuje ci"), ("different", "Inna wersja"), ("same", "Wspólne"),
@@ -45,19 +46,20 @@ class ModsView(ctk.CTkFrame):
                                            unselected_color=T.CARD, unselected_hover_color=T.ROW_HOVER,
                                            text_color=T.TEXT)
         self.tabs.pack(side="left")
-        self.search = ctk.CTkEntry(bar, placeholder_text="szukaj moda…", width=220, height=34, fg_color=T.CARD,
-                                   border_color=T.BORDER, font=T.font(13))
+        self.search = SearchBox(bar, lambda: self.refresh(force=True))
         self.search.pack(side="right")
-        self.search.bind("<KeyRelease>", lambda e: self.refresh(force=True))
-        self.search.bind("<Escape>", lambda e: (self.search.delete(0, "end"), self.refresh(force=True)))
 
-        self.kinds = ctk.CTkSegmentedButton(self, values=[k for _, k in KINDS], command=self._kind_clicked,
+        filt = ctk.CTkFrame(self, fg_color="transparent")
+        filt.pack(fill="x", pady=(0, 8))
+        self.min_holders = int(app.node.cfg.get("min_holders", 2))
+        MinHolders(filt, self.min_holders, self._min_changed).pack(side="right")
+        self.kinds = ctk.CTkSegmentedButton(filt, values=[k for _, k in KINDS], command=self._kind_clicked,
                                             font=T.font(12), height=28, fg_color=T.BG,
                                             selected_color=T.ROW_HOVER, selected_hover_color=T.ROW_HOVER,
                                             unselected_color=T.BG, unselected_hover_color=T.CARD,
                                             text_color=T.TEXT)
         self.kinds.set("Wszystko")
-        self.kinds.pack(anchor="w", pady=(0, 8))
+        self.kinds.pack(side="left")
 
         self.table = ModTable(self, on_change=self._update_footer)
         self.table.pack(fill="both", expand=True)
@@ -81,13 +83,13 @@ class ModsView(ctk.CTkFrame):
         if self.mode == "all":
             missing = cache.missing_all()
             items = [(m, n) for m, n, diff in missing if diff == (self.tab == "different")]
-            return [m for m, _ in items], {m.ih: f"ma {_players(n)}" for m, n in items}, None
+            return [m for m, _ in items], {m.ih: f"ma {players_text(n)}" for m, n in items}, None
         p = node.players.get(self.pid)
         cmp = cache.get(p) if p else None
         if cmp is None:
             return [], {}, (p, None)
         mods = getattr(cmp, self.tab)
-        extra = {m.ih: f"ma {_players(holders.get(m.ih, 0))}" for m in mods} if self.tab != "only_mine" else {}
+        extra = {m.ih: f"ma {players_text(holders.get(m.ih, 0))}" for m in mods} if self.tab != "only_mine" else {}
         return mods, extra, (p, cmp)
 
     def refresh(self, force=False):
@@ -95,36 +97,32 @@ class ModsView(ctk.CTkFrame):
         mods, extra, pc = self._source()
         self._header(pc)
         transfers = {t.ih: t for t in node.engine.active()}
-        q = self.search.get().strip().lower().split()
-        rows, groups = [], {}
-        for m in mods:
-            if self.kind and m.kind != self.kind:
-                continue
-            if q and not all(w in m.key.lower() for w in q):
-                continue
-            groups.setdefault(m.kind, []).append(m)
-        self._mods = {}
+        query = self.search.get()
         checkable = self.tab in ("missing", "different")
-        for kind, _ in KIND_GROUPS:
-            if kind not in groups:
-                continue
-            g = groups[kind]
-            rows.append({"header": True, "kind": kind, "selectable": checkable,
-                         "label": f"{KIND_PLURAL[kind]}  ·  {len(g)}  ·  {fmt_size(sum(m.size for m in g))}"})
-            for m in g:
-                t = transfers.get(m.ih)
-                chip, color = _chip(self.tab, t)
-                rows.append({"id": m.ih, "kind": m.kind, "name": m.name, "path": mod_dir(m.key) or "mods",
-                             "size": m.size, "extra": extra.get(m.ih, ""), "chip": chip, "chip_color": color,
-                             "checkable": checkable and t is None})
-                self._mods[m.ih] = m
-        sig = (tuple((r.get("id"), r.get("chip"), r.get("extra"), r.get("label")) for r in rows), self.tab)
+        min_h = self.min_holders if checkable else 0
+        shown = filter_mods(mods, query, self.kind, min_h, self.app.cache.holders_count())
+        self._mods = {m.ih: m for m in shown}
+        self.hidden = len(mods) - len(shown)
+
+        def row(m):
+            t = transfers.get(m.ih)
+            chip, color = _chip(self.tab, t)
+            return {"extra": extra.get(m.ih, ""), "chip": chip, "chip_color": color,
+                    "checkable": checkable and t is None}
+        rows = build_rows(shown, row, checkable)
+        sig = (tuple((r.get("id"), r.get("chip"), r.get("extra"), r.get("label"), r.get("count")) for r in rows),
+               self.tab)
         if force or sig != self._sig:
             self._sig = sig
             self.table.checkable = checkable
-            self.table.empty = _empty_text(self.mode, self.tab, bool(q or self.kind))
+            self.table.empty = _empty_text(self.mode, self.tab, bool(query or self.kind), self.hidden, min_h)
             self.table.set_rows(rows)
             self._update_footer()
+
+    def _min_changed(self, value):
+        self.min_holders = value
+        self.app.node.set_options(min_holders=value)
+        self.refresh(force=True)
 
     def _header(self, pc):
         node, cache = self.app.node, self.app.cache
@@ -189,8 +187,10 @@ class ModsView(ctk.CTkFrame):
         ids = self.table.checked_ids()
         size = sum(self._mods[i].size for i in ids if i in self._mods)
         if self.tab in ("missing", "different"):
-            self.sel_lbl.configure(text=f"zaznaczono {plural_mods(len(ids))}  ·  {fmt_size(size)}" if ids
-                                   else "kliknij mody (albo nagłówek grupy), żeby je zaznaczyć")
+            hidden = getattr(self, "hidden", 0)
+            hint = (f"ukryto {plural_mods(hidden)} (filtr min. graczy / wyszukiwanie)" if hidden
+                    else "kliknij mody albo grupę, żeby je zaznaczyć")
+            self.sel_lbl.configure(text=f"zaznaczono {plural_mods(len(ids))}  ·  {fmt_size(size)}" if ids else hint)
             self.dl_btn.configure(state="normal" if ids else "disabled")
         else:
             self.sel_lbl.configure(text="")
@@ -204,10 +204,6 @@ class ModsView(ctk.CTkFrame):
             self.refresh(force=True)
 
 
-def _players(n):
-    return "1 gracz" if n == 1 else (f"{n} graczy" if n != 0 else "nikt online")
-
-
 def _chip(tab, transfer):
     if transfer is not None:
         if transfer.error:
@@ -217,9 +213,11 @@ def _chip(tab, transfer):
             "same": ("MASZ", T.GREEN), "only_mine": ("TYLKO TY", T.MUTED)}[tab]
 
 
-def _empty_text(mode, tab, filtered):
+def _empty_text(mode, tab, filtered, hidden=0, min_h=0):
     if filtered:
-        return "Nic nie pasuje do filtra :/"
+        return "Nic nie pasuje do wyszukiwania / rodzaju :/"
+    if hidden and min_h > 1:
+        return f"Ukryto {hidden} modów, które ma mniej niż {min_h} graczy – zmień filtr „min. graczy” na 1"
     if mode == "all":
         return "Masz wszystko, co mają gracze online :D" if tab == "missing" else "Żadnych różnic w wersjach :]"
     return {"missing": "Masz wszystkie jego mody :D", "different": "Wszystkie wspólne mody w tej samej wersji :]",

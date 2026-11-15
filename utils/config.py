@@ -18,6 +18,8 @@ DEFAULTS = {
     "max_up": 0,                # KB/s, 0 = bez limitu
     "max_down": 0,
     "manual_peers": [],         # gracze dodani ręcznie po IP (poza LAN / Radminem)
+    "min_holders": 2,           # filtr „min. graczy z tym modem” na listach do pobrania
+    "ignored_conflicts": {},    # pominięte różnice wersji: klucz modu -> infohash wersji gracza
 }
 
 

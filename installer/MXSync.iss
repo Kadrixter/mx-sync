@@ -65,10 +65,12 @@ Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
 Source: "..\dist\MXSync\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; osobny plik ikony dla skrótów – nowa ikona na pulpicie i w menu Start także po aktualizacji
+Source: "..\assets\icon.ico"; DestDir: "{app}"; DestName: "MXSync.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{app}\MXSync.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; IconFilename: "{app}\MXSync.ico"; Tasks: desktopicon
 
 [Run]
 ; zapora: najpierw usuń starą regułę (po aktualizacji), potem dodaj dla wszystkich profili –
@@ -77,6 +79,8 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
   Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Konfiguruję zaporę Windows…"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#FwRule}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=any"; \
   Flags: runhidden; Check: IsAdminInstallMode; StatusMsg: "Konfiguruję zaporę Windows…"
+; odśwież pamięć ikon Windows (inaczej skrót może dalej pokazywać starą ikonę)
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden skipifdoesntexist
 ; uruchom po instalacji (przy aktualizacji z aplikacji – /SILENT – też, bez pytania)
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall runasoriginaluser

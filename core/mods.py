@@ -1,18 +1,21 @@
-"""Co jest „modem” w folderze mods MX Bikes i jakiego jest rodzaju.
+"""Co jest „modem” w folderze mods MX Bikes, do jakiej grupy należy i jakiego jest rodzaju.
 
-Mod = pierwszy element ścieżki, który nie jest folderem-kategorią:
-  'tracks/motocross/Foo.pkz'          -> mod 'tracks/motocross/Foo.pkz' (plik)
-  'tracks/motocross/Foo/terrain/a.hrc' -> mod 'tracks/motocross/Foo'   (folder)
-scan_mods() przechodzi cały folder mods i grupuje pliki w mody.
+Zasady (od 2.1):
+  * każdy plik paczki (.pkz) to osobny mod:      'tracks/motocross/Foo.pkz'
+  * folder z paczkami to GRUPA (np. paczka map):  'tracks/motocross/Pack/a.pkz' -> grupa 'tracks/motocross/Pack'
+  * folder z rozpakowanym modem (pliki .ini, .hrc, … bez paczek) to jeden mod: 'bikes/MojMotor'
+Foldery-kategorie (tracks, motocross, bikes, rider, …) nie są ani modami, ani grupami.
 """
 import hashlib
 import os
+import re
 
 CATEGORY_DIRS = {
     "mods", "tracks", "bikes", "rider", "riders", "tyres", "misc", "motocross", "supercross",
     "enduro", "supermoto", "arenacross", "freestyle", "paints", "helmets", "boots", "gloves",
     "goggles", "protections", "neckbraces", "bodies", "models", "sounds", "skins", "gear",
 }
+PACKAGE_EXT = (".pkz", ".pkg", ".zip")
 # rodzaj modu z najgłębszego folderu-kategorii w ścieżce ('rider/helmets/X' -> Kask)
 CATEGORY_LABELS = {"tracks": "Mapa", "motocross": "Mapa", "supercross": "Mapa", "enduro": "Mapa",
                    "supermoto": "Mapa", "arenacross": "Mapa", "freestyle": "Mapa",
@@ -23,25 +26,20 @@ CATEGORY_LABELS = {"tracks": "Mapa", "motocross": "Mapa", "supercross": "Mapa", 
                    "neckbraces": "Strój", "gear": "Strój", "skins": "Strój",
                    "rider": "Rider", "riders": "Rider", "bodies": "Rider",
                    "misc": "Inne"}
-# grupy (kolejność wyświetlania) i ich znaczki ASCII
 KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Opony", "Opony"), ("Kask", "Kaski"),
                ("Strój", "Stroje"), ("Rider", "Ridery"), ("Inne", "Inne")]
 KIND_ORDER = {k: i for i, (k, _) in enumerate(KIND_GROUPS)}
 KIND_PLURAL = dict(KIND_GROUPS)
 SKIP_SUFFIXES = (".part", ".parts", ".!qb", ".tmp")
+SKIP_NAMES = {"thumbs.db", "desktop.ini", ".ds_store"}
+# kolejność skanowania (etapy z zapisem postępu): najmniejsze najpierw, tracks – zwykle największe – na końcu
+SCAN_ORDER = ["rider", "tyres", "misc", "bikes"]
+SCAN_LAST = "tracks"
 
 
 def norm_rel(rel):
     """Ścieżka względem folderu mods, zawsze z '/'."""
     return "/".join(p for p in rel.replace("\\", "/").split("/") if p and p != ".")
-
-
-def mod_key(rel):
-    parts = [p for p in norm_rel(rel).split("/") if p]
-    for i, p in enumerate(parts):
-        if p.lower() not in CATEGORY_DIRS or i == len(parts) - 1:
-            return "/".join(parts[:i + 1])
-    return "/".join(parts)
 
 
 def mod_kind(key):
@@ -62,8 +60,49 @@ def mod_name(key):
 
 
 def mod_dir(key):
-    """Folder kategorii, w którym leży mod ('tracks/motocross')."""
+    """Folder, w którym leży mod ('tracks/motocross')."""
     return key.rsplit("/", 1)[0] if "/" in key else ""
+
+
+def mod_group(key):
+    """Grupa modu = jego folder, jeśli to nie jest sam folder-kategoria; inaczej None."""
+    d = mod_dir(key)
+    if not d:
+        return None
+    return None if d.rsplit("/", 1)[-1].lower() in CATEGORY_DIRS else d
+
+
+def group_parents(group):
+    """Grupa i wszystkie grupy nadrzędne ('t/m/A/B' -> ['t/m/A/B', 't/m/A'])."""
+    out = []
+    g = group
+    while g and g.rsplit("/", 1)[-1].lower() not in CATEGORY_DIRS:
+        out.append(g)
+        g = mod_dir(g)
+    return out
+
+
+def scan_stage(key):
+    """Numer etapu skanowania dla modu: rider, tyres, misc, bikes, (inne), tracks."""
+    top = key.split("/", 1)[0].lower()
+    if top in SCAN_ORDER:
+        return SCAN_ORDER.index(top)
+    return len(SCAN_ORDER) + (1 if top == SCAN_LAST else 0)
+
+
+STAGE_NAMES = SCAN_ORDER + ["inne", SCAN_LAST]
+
+
+def search_text(*parts):
+    """Tekst do wyszukiwania: małe litery + wersja bez znaków innych niż litery i cyfry."""
+    raw = " ".join(p for p in parts if p).lower()
+    return raw + " " + re.sub(r"[^0-9a-ząćęłńóśźż]+", "", raw)
+
+
+def matches(text, query):
+    """Każde słowo zapytania musi wystąpić (np. 'spa' i '1998' pasują do '0xspa1998.pkz')."""
+    words = [re.sub(r"[^0-9a-ząćęłńóśźż]+", "", w) for w in query.lower().split()]
+    return all(w in text for w in words if w)
 
 
 def safe_path(root, key):
@@ -93,6 +132,42 @@ class LocalMod:
         return h.hexdigest()
 
 
+def _entries(path):
+    files, dirs = [], []
+    try:
+        for e in os.scandir(path):
+            try:
+                if e.is_symlink():
+                    continue
+                if e.is_dir():
+                    dirs.append(e)
+                elif e.is_file():
+                    low = e.name.lower()
+                    if not low.endswith(SKIP_SUFFIXES) and low not in SKIP_NAMES:
+                        files.append(e)
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return files, dirs
+
+
+def _whole_dir(mod, path, rel):
+    """Cały folder (rozpakowany mod) jako jeden mod."""
+    stack = [(path, rel)]
+    while stack:
+        p, r = stack.pop()
+        files, dirs = _entries(p)
+        for f in files:
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            mod.files.append((f"{r}/{f.name}", st.st_size, st.st_mtime_ns))
+            mod.size += st.st_size
+        stack += [(d.path, f"{r}/{d.name}") for d in dirs]
+
+
 def scan_mods(root, stop=None):
     """{klucz modu: LocalMod} dla całego folderu mods (bez plików tymczasowych)."""
     mods = {}
@@ -101,30 +176,25 @@ def scan_mods(root, stop=None):
         if stop is not None and stop.is_set():
             break
         path, rel = stack.pop()
-        try:
-            entries = list(os.scandir(path))
-        except OSError:
+        files, dirs = _entries(path)
+        name = rel.rsplit("/", 1)[-1].lower()
+        is_category = rel == "" or name in CATEGORY_DIRS
+        has_package = any(f.name.lower().endswith(PACKAGE_EXT) for f in files)
+        if not is_category and files and not has_package:
+            m = mods[rel] = LocalMod(rel)          # rozpakowany mod – cały folder
+            m.is_dir = True
+            _whole_dir(m, path, rel)
             continue
-        for e in entries:
-            r = f"{rel}/{e.name}" if rel else e.name
+        for f in files:                            # kategoria albo grupa: każdy plik osobno
             try:
-                if e.is_symlink():
-                    continue
-                if e.is_dir():
-                    stack.append((e.path, r))
-                    continue
-                if not e.is_file() or e.name.lower().endswith(SKIP_SUFFIXES):
-                    continue
-                st = e.stat()
+                st = f.stat()
             except OSError:
                 continue
-            key = mod_key(r)
-            m = mods.get(key)
-            if m is None:
-                m = mods[key] = LocalMod(key)
-            m.is_dir = m.is_dir or key != r
-            m.files.append((r, st.st_size, st.st_mtime_ns))
-            m.size += st.st_size
+            key = f"{rel}/{f.name}" if rel else f.name
+            m = mods[key] = LocalMod(key)
+            m.files.append((key, st.st_size, st.st_mtime_ns))
+            m.size = st.st_size
+        stack += [(d.path, f"{rel}/{d.name}" if rel else d.name) for d in dirs]
     return mods
 
 
@@ -138,24 +208,5 @@ def scan_one(root, key):
         m.size = st.st_size
         return m
     m.is_dir = True
-    stack = [(path, key)]
-    while stack:
-        p, rel = stack.pop()
-        try:
-            entries = list(os.scandir(p))
-        except OSError:
-            continue
-        for e in entries:
-            r = f"{rel}/{e.name}"
-            try:
-                if e.is_symlink():
-                    continue
-                if e.is_dir():
-                    stack.append((e.path, r))
-                elif e.is_file() and not e.name.lower().endswith(SKIP_SUFFIXES):
-                    st = e.stat()
-                    m.files.append((r, st.st_size, st.st_mtime_ns))
-                    m.size += st.st_size
-            except OSError:
-                pass
+    _whole_dir(m, path, key)
     return m

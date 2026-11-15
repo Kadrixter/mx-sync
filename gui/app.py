@@ -12,6 +12,7 @@ from gui.sidebar import Sidebar
 from gui.topbar import TopBar
 from gui.tray import Tray
 from gui.update_banner import UpdateWatcher
+from gui.views.integrity_view import IntegrityView
 from gui.views.library_view import LibraryView
 from gui.views.mods_view import ModsView
 from gui.views.transfers_view import TransfersView
@@ -91,6 +92,8 @@ class App(ctk.CTk):
             self.view = LibraryView(self.content, self)
         elif kind == "transfers":
             self.view = TransfersView(self.content, self)
+        elif kind == "integrity":
+            self.view = IntegrityView(self.content, self)
         else:
             self.view = ModsView(self.content, self, "all")
         self.view_key = key

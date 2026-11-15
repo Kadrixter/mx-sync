@@ -3,10 +3,12 @@ import os
 
 import customtkinter as ctk
 
-from core.mods import KIND_GROUPS, KIND_PLURAL, mod_dir
+from core.mods import KIND_GROUPS, KIND_PLURAL
 from gui import theme as T
 from gui.mod_table import ModTable
-from gui.widgets import AnimatedProgressBar
+from gui.rows import build_rows, filter_mods, players_text
+from gui.views.mods_view import KINDS
+from gui.widgets import AnimatedProgressBar, MinHolders, SearchBox
 from utils.fmt import fmt_size, plural_mods
 
 
@@ -32,6 +34,19 @@ class LibraryView(ctk.CTkFrame):
         self.bar = AnimatedProgressBar(head, height=10, bg=T.CARD)
         ctk.CTkFrame(head, fg_color="transparent", height=10).pack(side="bottom")
 
+        filt = ctk.CTkFrame(self, fg_color="transparent")
+        filt.pack(fill="x", pady=(0, 8))
+        self.kind, self.min_holders = "", 1
+        self.kinds = ctk.CTkSegmentedButton(filt, values=[k for _, k in KINDS], command=self._kind_clicked,
+                                            font=T.font(12), height=28, fg_color=T.BG,
+                                            selected_color=T.ROW_HOVER, selected_hover_color=T.ROW_HOVER,
+                                            unselected_color=T.BG, unselected_hover_color=T.CARD,
+                                            text_color=T.TEXT)
+        self.kinds.set("Wszystko")
+        self.kinds.pack(side="left")
+        self.search = SearchBox(filt, lambda: self.refresh(force=True), "szukaj w moich modach…")
+        self.search.pack(side="right")
+        MinHolders(self, 1, self._min_changed).pack(anchor="e", pady=(0, 8))
         self.table = ModTable(self, checkable=False, empty="Brak modów w folderze")
         self.table.pack(fill="both", expand=True)
         self.refresh(force=True)
@@ -58,8 +73,10 @@ class LibraryView(ctk.CTkFrame):
         elif lib.scanning:
             done, total = lib.progress
             cur = f"  ·  liczę: {lib.current} {round(lib.current_pct * 100)}%" if lib.current else ""
-            self.scan_lbl.configure(text=f"Przygotowuję mody do udostępniania: {done} / {total}{cur}  "
-                                         "(pierwszy raz trwa dłużej, potem sekundy)", text_color=T.ACCENT2)
+            stage = f"etap {lib.stage[0]}/{lib.stage[1]} ({lib.stage[2]})  ·  " if lib.stage else ""
+            what = "Sprawdzam integralność" if node.verifying else "Przygotowuję mody do udostępniania"
+            self.scan_lbl.configure(text=f"{what}: {stage}{done} / {total}{cur}  ·  gotowe etapy są już "
+                                         "udostępniane", text_color=T.ACCENT2)
             self.scan_lbl.pack(fill="x", padx=18, pady=(6, 0))
             self.bar.pack(fill="x", padx=18, pady=(6, 0))
             self.bar.set(done / total if total else 0)
@@ -68,23 +85,27 @@ class LibraryView(ctk.CTkFrame):
             self.bar.pack_forget()
 
         counts = self.app.cache.holders_count()
-        rows, groups = [], {}
-        for m in mods.values():
-            groups.setdefault(m.kind, []).append(m)
-        for kind, _ in KIND_GROUPS:
-            g = sorted(groups.get(kind, []), key=lambda m: m.name.lower())
-            if not g:
-                continue
-            rows.append({"header": True, "kind": kind, "selectable": False,
-                         "label": f"{KIND_PLURAL[kind]}  ·  {len(g)}  ·  {fmt_size(sum(m.size for m in g))}"})
-            for m in g:
-                n = counts.get(m.ih, 0)
-                rows.append({"id": m.ih, "kind": m.kind, "name": m.name, "path": mod_dir(m.key) or "mods",
-                             "size": m.size, "extra": f"ma też {n} graczy" if n > 1 else
-                             ("ma też 1 gracz" if n == 1 else "tylko ty"),
-                             "extra_color": T.GREEN if n else T.MUTED,
-                             "chip": "UDOSTĘPNIASZ", "chip_color": T.CYAN})
-        sig = tuple((r.get("id"), r.get("extra"), r.get("label")) for r in rows)
+        # „ilu graczy ma” w bibliotece liczy też ciebie (masz każdy z tych modów)
+        mine_counts = {m.ih: counts.get(m.ih, 0) + 1 for m in mods.values()}
+        query = self.search.get()
+        shown = filter_mods(list(mods.values()), query, self.kind, self.min_holders, mine_counts)
+
+        def row(m):
+            n = counts.get(m.ih, 0)
+            return {"extra": f"ma też {players_text(n)}" if n else "tylko ty",
+                    "extra_color": T.GREEN if n else T.MUTED, "chip": "UDOSTĘPNIASZ", "chip_color": T.CYAN}
+        rows = build_rows(shown, row, checkable=False)
+        sig = tuple((r.get("id"), r.get("extra"), r.get("label"), r.get("count")) for r in rows)
         if force or sig != self._sig:
             self._sig = sig
+            hidden = len(mods) - len(shown)
+            self.table.empty = ("Nic nie pasuje do filtra :/" if hidden else "Brak modów w folderze")
             self.table.set_rows(rows)
+
+    def _kind_clicked(self, value):
+        self.kind = next(k for k, v in KINDS if v == value)
+        self.refresh(force=True)
+
+    def _min_changed(self, value):
+        self.min_holders = value
+        self.refresh(force=True)

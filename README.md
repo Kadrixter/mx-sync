@@ -19,7 +19,15 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Zgodność modów** – przy każdym graczu kółko z procentem: ile modów macie identycznych (w tej samej wersji)
   względem wszystkich modów was obu. W szczegółach gracza zakładki: *Brakuje ci*, *Inna wersja*, *Wspólne*,
   *Tylko u ciebie*.
+- **Mody i grupy** – każdy plik `.pkz` to osobny mod. Folder z paczkami (np. `tracks/motocross/Paczka2024/`) to grupa:
+  grupy są na górze listy, a zaznaczenie grupy zaznacza wszystkie jej mapy / mody. Folder z rozpakowanym modem
+  (pliki `.ini`, `.hrc`, …) to jeden mod.
 - **Brakujące mody** – zbiorczo wszystko, co mają gracze online, a ty nie (z liczbą graczy, którzy mają dany mod).
+- **Filtr „min. graczy z modem”** (domyślnie 2) – pokazuje tylko mody, które ma co najmniej tylu graczy.
+- **Wyszukiwarka** – po nazwie, grupie i folderze; kilka słów naraz, znaki `_ - .` są pomijane
+  (np. `spa` albo `1998` znajdzie `0xspa1998.pkz`).
+- **Integralność** – pełne sprawdzenie liczy sumy wszystkich twoich modów od nowa; lista pokazuje mody o tej samej
+  nazwie co u innych, ale z inną zawartością – każdy można pominąć albo pobrać wersję innych.
 - **Pobieranie** – zaznaczasz mody (albo całą grupę) i „Pobierz zaznaczone”. Każdy mod pobiera się od wszystkich,
   którzy go mają, i od innych pobierających w tym samym czasie. Inna wersja modu jest podmieniana: pobierane są
   tylko zmienione pliki, a pliki starej wersji, których nie ma w nowej, są usuwane.
@@ -33,10 +41,11 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Aktualizacje** – sprawdzanie GitHuba przy starcie i co 10 minut; pomarańczowy pasek u góry okna, kliknięcie
   pobiera instalator, instaluje i uruchamia program ponownie.
 
-Pierwsze uruchomienie przygotowuje mody do udostępniania (liczy sumy kontrolne – przy dużej bibliotece kilka minut).
-Kolejne starty biorą wynik z pamięci i trwają sekundy.
+Pierwsze uruchomienie przygotowuje mody do udostępniania (liczy sumy kontrolne – przy dużej bibliotece kilka minut)
+etapami: rider, tyres, misc, bikes, na końcu tracks. Po każdym etapie postęp jest zapisywany, a gotowe mody są już
+udostępniane. Kolejne starty biorą wynik z pamięci i liczą tylko nowe / zmienione mody – program o tym informuje.
 
-Zgodność: 2.0 to nowy protokół – wersje 1.x nie łączą się z 2.0. Wersja 1.3.x sama zaproponuje aktualizację.
+Zgodność: 2.1 to protokół 4 (mod = pojedynczy plik) – nie łączy się z 2.0 ani 1.x; starsze wersje same proponują aktualizację.
 
 ## Pod spodem
 

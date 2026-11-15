@@ -13,7 +13,7 @@ Transfery: libtorrent (port w polu "lt"), prywatne torrenty v2 – po jednym na 
 import hashlib
 import hmac
 
-PROTO = 3
+PROTO = 4                   # 4: mod = pojedynczy plik .pkz, foldery z paczkami to grupy
 MAGIC = f"MXSYNC{PROTO}"
 QUERY = MAGIC.encode() + b"?"
 OLD_QUERY = b"MXSYNC?"

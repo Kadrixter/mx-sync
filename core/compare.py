@@ -57,3 +57,28 @@ def missing_from_all(mine, players):
 def holders(ih, players):
     """Gracze online, którzy mają dokładnie tę wersję modu."""
     return [p for p in players if any(m.ih == ih for m in p.mods.values())]
+
+
+def conflicts(mine, players, ignored=None):
+    """Mody, które mam pod tą samą nazwą co inni gracze, ale z inną zawartością.
+
+    -> [(mój Mod, ich Mod (najpopularniejsza inna wersja), ilu graczy ma tę wersję, pominięty)]
+    """
+    ignored = ignored or {}
+    by_key = {}
+    for p in players:
+        for key, m in p.mods.items():
+            my = mine.get(key)
+            if my is None or my.ih == m.ih:
+                continue
+            versions = by_key.setdefault(key, {})
+            if m.ih in versions:
+                versions[m.ih][1] += 1
+            else:
+                versions[m.ih] = [m, 1]
+    out = []
+    for key, versions in by_key.items():
+        m, n = max(versions.values(), key=lambda v: v[1])
+        out.append((mine[key], m, n, ignored.get(key) == m.ih))
+    out.sort(key=lambda x: sort_key(x[0]))
+    return out

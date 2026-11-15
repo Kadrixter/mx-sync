@@ -54,7 +54,7 @@ class Engine:
             "enable_dht": False, "enable_lsd": False,
             "enable_upnp": True, "enable_natpmp": True,
             "alert_mask": lt.alert_category.status | lt.alert_category.error | lt.alert_category.storage,
-            "active_downloads": 8, "active_seeds": 5000, "active_limit": 5000,
+            "active_downloads": 8, "active_seeds": 50000, "active_limit": 50000,
             "connections_limit": 400,
             "allow_multiple_connections_per_ip": True,
             "ignore_limits_on_local_network": False,   # limity z ustawień działają też w LAN

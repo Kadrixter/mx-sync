@@ -99,6 +99,7 @@ class Sidebar(ctk.CTkFrame):
             "all": NavItem(self, "!", "Brakujące mody", lambda: app.open_view("all")),
             "library": NavItem(self, "#", "Moja biblioteka", lambda: app.open_view("library")),
             "transfers": NavItem(self, "=", "Transfery", lambda: app.open_view("transfers")),
+            "integrity": NavItem(self, "?", "Integralność", lambda: app.open_view("integrity")),
         }
         for n in self.nav.values():
             n.pack(fill="x", padx=10, pady=1)
@@ -110,6 +111,15 @@ class Sidebar(ctk.CTkFrame):
                                                   "Inni muszą mieć włączony MX Sync.",
                                   font=T.font(12), text_color=T.MUTED, justify="left")
         T.button(self, "+  Dodaj gracza po IP", app.add_player_dialog, height=36).pack(fill="x", padx=14, pady=12)
+
+    def _conflicts(self):
+        """Liczba nierozwiązanych konfliktów – liczona tylko gdy coś się zmieniło."""
+        node = self.app.node
+        key = (node.library.rev, tuple((p.id, p.rev) for p in node.players.online()),
+               len(node.cfg.get("ignored_conflicts") or {}))
+        if getattr(self, "_conf_key", None) != key:
+            self._conf_key, self._conf_n = key, _conflicts_count(node)
+        return self._conf_n
 
     def refresh(self, selected):
         node, cache = self.app.node, self.app.cache
@@ -145,8 +155,19 @@ class Sidebar(ctk.CTkFrame):
         active = [t for t in node.engine.active() if not t.done]
         eng = node.engine
         self.nav["transfers"].set(f"↓ {fmt_speed(eng.down_rate)}   ↑ {fmt_speed(eng.up_rate)}", len(active), T.CYAN)
+        n_conf = self._conflicts()
+        self.nav["integrity"].set("sprawdzam…" if node.verifying else
+                                  (f"różne pliki: {n_conf}" if n_conf else "wszystko się zgadza"),
+                                  n_conf, T.YELLOW)
         for k, n in self.nav.items():
             n.select(selected == (k, None))
+
+
+def _conflicts_count(node):
+    from core.compare import conflicts
+    online = [p for p in node.players.online() if p.mods]
+    return sum(1 for *_, ignored in conflicts(node.library.snapshot(), online,
+                                              node.cfg.get("ignored_conflicts") or {}) if not ignored)
 
 
 def _section(master, text):

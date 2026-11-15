@@ -1,7 +1,9 @@
 """Szybka lista modów na Canvasie – rysuje tylko widoczne wiersze (setki modów bez zacinania).
 
 Wiersz: dict(id, kind, name, path, size, extra, chip, chip_color, checkable)
-Nagłówek grupy: dict(header=True, kind, label) – kliknięcie zaznacza/odznacza całą grupę.
+Nagłówek sekcji: dict(header=True, kind, label) – kliknięcie zaznacza/odznacza całą sekcję.
+Grupa modów (folder z paczkami): dict(group=True, id, kind, name, path, size, members, extra) –
+checkbox grupy zaznacza wszystkie jej mody (kreska = zaznaczona część).
 """
 import tkinter as tk
 import tkinter.font as tkfont
@@ -23,6 +25,7 @@ class ModTable(ctk.CTkFrame):
         self.empty = empty
         self.rows = []
         self.checked = set()
+        self._can = set()           # mody, które da się zaznaczyć
         self._y = []                # górna krawędź każdego wiersza
         self._total = 0
         self._top = 0
@@ -47,8 +50,9 @@ class ModTable(ctk.CTkFrame):
     # ---------- dane ----------
 
     def set_rows(self, rows, keep_checks=True):
-        ids = {r["id"] for r in rows if not r.get("header") and r.get("checkable", True)}
+        ids = {r["id"] for r in rows if _is_mod(r) and r.get("checkable", True)}
         self.checked = (self.checked & ids) if keep_checks else set()
+        self._can = ids
         self.rows = rows
         self._y, y = [], 0
         for r in rows:
@@ -59,11 +63,10 @@ class ModTable(ctk.CTkFrame):
         self._render()
 
     def checked_ids(self):
-        return [r["id"] for r in self.rows if not r.get("header") and r["id"] in self.checked]
+        return [r["id"] for r in self.rows if _is_mod(r) and r["id"] in self.checked]
 
     def set_all(self, value):
-        ids = [r["id"] for r in self.rows if not r.get("header") and r.get("checkable", True)]
-        self.checked = set(ids) if value else set()
+        self.checked = set(self._can) if value else set()
         self._render()
         self._changed()
 
@@ -117,10 +120,18 @@ class ModTable(ctk.CTkFrame):
             return
         r = self.rows[i]
         if r.get("header"):
-            group = [x["id"] for x in self.rows if not x.get("header") and x["kind"] == r["kind"]
+            group = [x["id"] for x in self.rows if _is_mod(x) and x["kind"] == r["kind"]
                      and x.get("checkable", True)]
+            if not group or not r.get("selectable", True):
+                return
             on = not all(g in self.checked for g in group)
             self.checked = (self.checked | set(group)) if on else (self.checked - set(group))
+        elif r.get("group"):
+            members = [m for m in r["members"] if m in self._can]
+            if not members:
+                return
+            on = not all(m in self.checked for m in members)
+            self.checked = (self.checked | set(members)) if on else (self.checked - set(members))
         elif r.get("checkable", True):
             self.checked ^= {r["id"]}
         else:
@@ -149,6 +160,8 @@ class ModTable(ctk.CTkFrame):
             r = self.rows[i]
             if r.get("header"):
                 self._draw_header(r, y, w)
+            elif r.get("group"):
+                self._draw_group(r, y, w, i == self._hover)
             else:
                 self._draw_row(r, y, w, i == self._hover)
         if self._total > 0:
@@ -162,6 +175,45 @@ class ModTable(ctk.CTkFrame):
             cv.create_text(w - 12, y + HEAD_H / 2 + 3, text="zaznacz grupę", anchor="e", fill=T.MUTED,
                            font=self.f_small)
 
+    def _checkbox(self, x, y, state, can):
+        """state: 0 – pusty, 1 – część zaznaczona (kreska), 2 – zaznaczony."""
+        cv = self.cv
+        box = T.ACCENT if state else (T.ROW_HOVER if can else T.ROW)
+        _round(cv, x, y + 13, x + 18, y + 31, 5, box, outline="" if state else (T.FAINT if can else T.BORDER))
+        if state == 2:
+            cv.create_line(x + 4, y + 22, x + 8, y + 26, x + 14, y + 17, fill="#111111", width=2.4,
+                           capstyle="round", joinstyle="round")
+        elif state == 1:
+            cv.create_line(x + 4, y + 22, x + 14, y + 22, fill="#111111", width=2.4, capstyle="round")
+
+    def _draw_group(self, r, y, w, hover):
+        cv = self.cv
+        members = [m for m in r["members"] if m in self._can]
+        n_on = sum(1 for m in members if m in self.checked)
+        state = 2 if members and n_on == len(members) else (1 if n_on else 0)
+        _round(cv, 4, y + 3, w - 4, y + ROW_H - 3, 8, T.CARD_SEL if state else (T.CARD_HOVER if hover else T.ROW))
+        _round(cv, 4, y + 3, 9, y + ROW_H - 3, 2, T.KIND_STYLE.get(r["kind"], ("", T.MUTED))[1])
+        x = 18
+        if self.checkable:
+            self._checkbox(x, y, state, bool(members))
+            x += 30
+        _round(cv, x, y + 10, x + 24, y + 34, 6, T.BG)
+        cv.create_text(x + 12, y + 22, text="[]", fill=T.ACCENT2, font=self.f_badge)
+        x += 36
+        right = w - 16
+        info = f"{r['count']} w grupie" + (f"  ·  zaznaczono {n_on}" if n_on else "")
+        cv.create_text(right, y + 22, text=fmt_size(r.get("size", 0)), anchor="e", fill=T.TEXT, font=self.f_small)
+        right -= 92
+        cv.create_text(right, y + 22, text=info, anchor="e", fill=T.ACCENT2 if n_on else T.MUTED, font=self.f_small)
+        right -= self.f_small.measure(info) + 16
+        if r.get("extra"):
+            cv.create_text(right, y + 22, text=r["extra"], anchor="e", fill=T.MUTED, font=self.f_small)
+            right -= self.f_small.measure(r["extra"]) + 16
+        cv.create_text(x, y + 15, text=_fit(self.f_name, r["name"], right - x), anchor="w", fill=T.TEXT,
+                       font=self.f_name)
+        cv.create_text(x, y + 31, text=_fit(self.f_small, r.get("path", ""), right - x), anchor="w",
+                       fill=T.FAINT, font=self.f_small)
+
     def _draw_row(self, r, y, w, hover):
         cv = self.cv
         y1, y2 = y + 3, y + ROW_H - 3
@@ -170,12 +222,7 @@ class ModTable(ctk.CTkFrame):
         _round(cv, 4, y1, w - 4, y2, 8, bg)
         x = 14
         if self.checkable:
-            can = r.get("checkable", True)
-            box = T.ACCENT if on else (T.ROW_HOVER if can else T.ROW)
-            _round(cv, x, y + 13, x + 18, y + 31, 5, box, outline="" if on else (T.FAINT if can else T.BORDER))
-            if on:
-                cv.create_line(x + 4, y + 22, x + 8, y + 26, x + 14, y + 17, fill="#111111", width=2.4,
-                               capstyle="round", joinstyle="round")
+            self._checkbox(x, y, 2 if on else 0, r.get("checkable", True))
             x += 30
         glyph, color = T.KIND_STYLE.get(r["kind"], ("*", T.MUTED))
         _round(cv, x, y + 10, x + 24, y + 34, 6, T.BG)
@@ -199,6 +246,10 @@ class ModTable(ctk.CTkFrame):
         cv.create_text(x, y + 15, text=name, anchor="w", fill=T.TEXT, font=self.f_name)
         cv.create_text(x, y + 31, text=_fit(self.f_small, r.get("path", ""), right - x), anchor="w",
                        fill=T.FAINT, font=self.f_small)
+
+
+def _is_mod(r):
+    return not r.get("header") and not r.get("group")
 
 
 def _round(cv, x1, y1, x2, y2, r, fill, outline=""):

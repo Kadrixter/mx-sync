@@ -46,7 +46,8 @@ class Node:
         self.library = Library()
         self.engine = Engine(on_finished=self._finished)
         self.api = ApiServer(self)
-        self.players = Players(self.id, lambda: self.password, lambda: self.name)
+        self.players = Players(self.id, lambda: self.password, lambda: self.name,
+                               on_change=self._players_changed)
         self.beacon = Beacon(self.hello, self.players.found, self._manual_ips)
         self.events = []            # komunikaty dla GUI / zasobnika: (tytuł, tekst)
         self.recent = deque(maxlen=30)  # (godzina, nazwa) ostatnio pobranych modów
@@ -54,6 +55,9 @@ class Node:
         self._stop = threading.Event()
         self._scan_lock = threading.Lock()
         self._seeded = {}           # klucz modu -> infohash udostępnianej wersji
+        self._reconnect = threading.Event()  # ktoś nowy online – dołącz go do pobierań od razu
+        self.verifying = False
+        self.verified_at = None     # godzina ostatniego sprawdzenia integralności
         self.engine.set_limits(self.cfg["max_up"], self.cfg["max_down"])
 
     # ---------- ustawienia ----------
@@ -85,6 +89,20 @@ class Node:
             self.library.mods.clear()
             self.library.rev += 1
             self.rescan()
+
+    def verify(self):
+        if not self.library.scanning:
+            self.rescan(force=True)
+
+    def ignore_conflicts(self, pairs):
+        """Pomiń konflikty (klucz modu, infohash jego wersji) – nie będą proponowane do pobrania."""
+        ign = dict(self.cfg.get("ignored_conflicts") or {})
+        for key, ih in pairs:
+            ign[key] = ih
+        self.cfg = config.update(ignored_conflicts=ign)
+
+    def unignore_all(self):
+        self.cfg = config.update(ignored_conflicts={})
 
     def add_player(self, text):
         ip, port = parse_address(text)
@@ -129,7 +147,8 @@ class Node:
             except RuntimeError:
                 pass
             now = time.monotonic()
-            if now - last_connect > RECONNECT:
+            if now - last_connect > RECONNECT or self._reconnect.is_set():
+                self._reconnect.clear()
                 last_connect = now
                 peers = self._peers()
                 for t in self.engine.active():
@@ -142,11 +161,25 @@ class Node:
 
     # ---------- biblioteka ----------
 
-    def rescan(self):
+    def _players_changed(self):
+        self._reconnect.set()
+
+    def rescan(self, force=False):
+        """force=True – sprawdzanie integralności: wszystkie mody liczone od nowa, bez pamięci."""
         def run():
             with self._scan_lock:
                 busy = {t.key for t in self.engine.active() if not t.done}
-                self.library.scan(self.folder, self._seed, skip=busy)
+                self.verifying = force
+                try:
+                    self.library.scan(self.folder, self._seed, skip=busy,
+                                      on_event=lambda t, x: self.events.append((t, x)), force=force)
+                finally:
+                    if force:
+                        self.verifying = False
+                        self.verified_at = time.strftime("%H:%M")
+                        n = len(self.library.changed)
+                        self.events.append(("Integralność sprawdzona", f"zmienione pliki: {n}" if n
+                                            else "twoje pliki zgadzają się z zapisanymi sumami"))
                 if not self._stop.is_set():
                     mods = self.library.snapshot()
                     for key, ih in list(self._seeded.items()):

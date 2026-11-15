@@ -11,7 +11,7 @@ import threading
 
 import libtorrent as lt
 
-from core.mods import mod_kind, mod_name, safe_path, scan_mods, scan_one
+from core.mods import STAGE_NAMES, mod_kind, mod_name, safe_path, scan_mods, scan_one, scan_stage
 from utils.config import DATA_DIR
 
 TORRENTS = DATA_DIR / "torrents"
@@ -73,6 +73,9 @@ class Library:
         self.progress = (0, 0)      # (gotowe mody, wszystkie)
         self.current = ""           # mod liczony w tej chwili
         self.current_pct = 0.0
+        self.stage = None           # (numer etapu, ile etapów, nazwa) w trakcie skanu
+        self.to_hash = 0            # ile modów trzeba policzyć w tym skanie
+        self.changed = []           # mody, których zawartość zmieniła się od poprzedniego skanu
         self.error = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -119,35 +122,63 @@ class Library:
         with self._lock:
             return dict(self.mods)
 
-    def scan(self, root, on_mod=None, skip=()):
-        """Skanuje folder; on_mod(Mod, path) dla każdego gotowego modu (np. od razu udostępnij).
-        skip – mody właśnie pobierane (pliki są niekompletne – nie liczymy ich ani nie usuwamy)."""
+    def scan(self, root, on_mod=None, skip=(), on_event=None, force=False):
+        """Skanuje folder etapami (rider, tyres, misc, bikes, inne, tracks); po każdym etapie zapis
+        postępu (checkpoint) – mody z gotowych etapów są już udostępniane, a przerwany skan
+        zaczyna od miejsca, w którym skończył.
+
+        on_mod(Mod, path) – mod gotowy (od razu udostępnij); on_event(tytuł, tekst) – komunikat.
+        skip – mody właśnie pobierane (pliki niekompletne – nie liczymy ich ani nie usuwamy).
+        force – licz wszystko od nowa, bez pamięci (sprawdzanie integralności)."""
         self.root, self.error, self.scanning = root, None, True
+        self.changed = []
         self._stop.clear()
+        event = on_event or (lambda *a: None)
         try:
-            local = scan_mods(root, self._stop) if root and os.path.isdir(root) else {}
-            if root and not os.path.isdir(root):
+            if not root or not os.path.isdir(root):
                 self.error = "Nie znaleziono folderu modów – ustaw go w Ustawieniach"
-            # najpierw mody z cache (szybko), potem te do policzenia
-            order = sorted(local.values(), key=lambda m: self._cache.get(m.key, {}).get("sig") != m.signature())
-            self.progress = (0, len(order))
-            found = {}
-            for n, lm in enumerate(order):
-                if self._stop.is_set():
-                    break
-                if lm.key in skip:
-                    found[lm.key] = self.mods.get(lm.key)
-                    continue
-                mod = self._mod_for(lm)
-                if mod:
+                return
+            local = scan_mods(root, self._stop)
+            todo = [m for m in local.values() if force or self._cache.get(m.key, {}).get("sig") != m.signature()]
+            self.to_hash = len(todo)
+            first = not self._cache
+            if force:
+                event("Sprawdzam integralność", f"Liczę od nowa {len(local)} modów – program może chwilę zwolnić")
+            elif first and local:
+                event("Pierwsze uruchomienie", f"Przygotowuję {len(local)} modów do udostępniania (rider, opony, "
+                                               "misc, motory, mapy) – to potrwa, program może chwilę zwolnić")
+            elif todo:
+                event("Nowe albo zmienione mody", f"Liczę {len(todo)} – reszta ({len(local) - len(todo)}) "
+                                                  "wczytana z pamięci; program może chwilę zwolnić")
+            stages = {}
+            for m in local.values():
+                stages.setdefault(scan_stage(m.key), []).append(m)
+            self.progress = (0, len(local))
+            done, found = 0, {}
+            for st in sorted(stages):
+                self.stage = (sorted(stages).index(st) + 1, len(stages), STAGE_NAMES[st])
+                for lm in sorted(stages[st], key=lambda m: m.key.lower()):
+                    if self._stop.is_set():
+                        break
+                    done += 1
+                    self.progress = (done, len(local))
+                    if lm.key in skip:
+                        found[lm.key] = self.mods.get(lm.key)
+                        continue
+                    mod = self._mod_for(lm, force)
+                    if not mod:
+                        continue
                     found[mod.key] = mod
                     with self._lock:
-                        if self.mods.get(mod.key) is None or self.mods[mod.key].ih != mod.ih:
+                        old = self.mods.get(mod.key)
+                        if old is None or old.ih != mod.ih:
+                            if old is not None:
+                                self.changed.append(mod.key)
                             self.mods[mod.key] = mod
                             self.rev += 1
                     if on_mod:
                         on_mod(mod, safe_path(root, mod.key))
-                self.progress = (n + 1, len(order))
+                self._save_cache()          # checkpoint po każdym etapie
             if not self._stop.is_set():
                 with self._lock:
                     gone = [k for k in self.mods if k not in found and k not in skip]
@@ -156,15 +187,19 @@ class Library:
                     if gone:
                         self.rev += 1
                 self._cache = {k: v for k, v in self._cache.items() if k in found or k in skip}
-            self._save_cache()
+                self._save_cache()
+                if todo and not force:
+                    event("Mody gotowe", f"Udostępniasz {len(found)} modów" +
+                          (f" (nowe / zmienione: {len(todo)})" if not first else ""))
         finally:
             self.current = ""
+            self.stage = None
             self.scanning = False
 
-    def _mod_for(self, lm):
+    def _mod_for(self, lm, force=False):
         sig = lm.signature()
         c = self._cache.get(lm.key)
-        if c and c.get("sig") == sig and (TORRENTS / f"{c['ih']}.torrent").exists():
+        if not force and c and c.get("sig") == sig and (TORRENTS / f"{c['ih']}.torrent").exists():
             return Mod(lm.key, c["ih"], lm.size, len(lm.files))
         self.current, self.current_pct = mod_name(lm.key), 0.0
         try:
@@ -173,7 +208,7 @@ class Library:
             return None                 # plik zablokowany / zniknął w trakcie – pominięty
         ih = self.store_torrent(raw)
         self._cache[lm.key] = {"sig": sig, "ih": ih}
-        if len(self._cache) % 20 == 0:
+        if len(self._cache) % 25 == 0:
             self._save_cache()
         return Mod(lm.key, ih, lm.size, len(lm.files))
 

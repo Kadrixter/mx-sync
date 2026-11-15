@@ -1,6 +1,8 @@
 """Własne widgety: animowany pasek postępu i kółko z procentem."""
 import tkinter as tk
 
+import customtkinter as ctk
+
 
 from gui import theme as T
 
@@ -137,3 +139,40 @@ class Ring(tk.Canvas):
             self.after_cancel(self._job)
             self._job = None
         super().destroy()
+
+
+class SearchBox(ctk.CTkFrame):
+    """Pole wyszukiwania z narysowaną lupką (bez emoji); on_change() po każdej zmianie, Esc czyści."""
+
+    def __init__(self, master, on_change, placeholder="szukaj moda…", width=240):
+        super().__init__(master, fg_color=T.CARD, corner_radius=8, border_width=1, border_color=T.BORDER,
+                         width=width, height=34)
+        self.pack_propagate(False)
+        icon = tk.Canvas(self, width=22, height=22, bg=T.CARD, highlightthickness=0, bd=0)
+        icon.create_oval(3, 3, 14, 14, outline=T.MUTED, width=2)
+        icon.create_line(13, 13, 19, 19, fill=T.MUTED, width=3, capstyle="round")
+        icon.pack(side="left", padx=(8, 2))
+        self.entry = ctk.CTkEntry(self, placeholder_text=placeholder, fg_color=T.CARD, border_width=0,
+                                  font=T.font(13), height=30)
+        self.entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
+        self.entry.bind("<KeyRelease>", lambda e: on_change())
+        self.entry.bind("<Escape>", lambda e: (self.entry.delete(0, "end"), on_change()))
+
+    def get(self):
+        return self.entry.get().strip()
+
+
+class MinHolders(ctk.CTkFrame):
+    """Filtr „min. graczy z tym modem” (1–5+)."""
+    VALUES = ["1", "2", "3", "4", "5"]
+
+    def __init__(self, master, value, on_change):
+        super().__init__(master, fg_color="transparent")
+        ctk.CTkLabel(self, text="min. graczy z modem:", font=T.font(12), text_color=T.MUTED).pack(side="left")
+        self.menu = ctk.CTkSegmentedButton(self, values=self.VALUES, command=lambda v: on_change(int(v)),
+                                           font=T.font(12, "bold"), height=28, fg_color=T.BG,
+                                           selected_color=T.ACCENT, selected_hover_color=T.ACCENT_HOVER,
+                                           unselected_color=T.CARD, unselected_hover_color=T.ROW_HOVER,
+                                           text_color=T.TEXT)
+        self.menu.set(str(max(1, min(5, int(value)))))
+        self.menu.pack(side="left", padx=(6, 0))
