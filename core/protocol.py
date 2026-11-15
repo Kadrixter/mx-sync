@@ -1,4 +1,4 @@
-"""Protokół 5 (MX Sync 2.2) – każdy gracz jest równy: udostępnia swoje mody i pobiera od innych.
+"""Protokół 6 (MX Sync 2.3.2) – każdy gracz jest równy: udostępnia swoje mody i pobiera od innych.
 
 HTTP (port HTTP_PORT, kolejny wolny):
   GET /hello            -> {"magic", "proto", "id", "name", "lt", "rev", "mods", "size", "protected", "nonce"}
@@ -10,15 +10,17 @@ HTTP (port HTTP_PORT, kolejny wolny):
 /hello z poprawnym hasłem zawiera też "wan": [publiczne ip, port] (połączenia bezpośrednie, MX Sync 2.3).
 Nagłówek X-MXSync-Id = id pytającego (do /reach i /punch).
 Hasło grupy: nagłówek X-MXSync-Auth = HMAC-SHA256(hasło, nonce adresata) – hasło nie idzie przez sieć.
-Wykrywanie (UDP DISCOVERY_PORT): b"MXSYNC5?" + JSON nadawcy -> odpowiedź JSON z /hello.
-Stare wersje (1.x) pytają b"MXSYNC?" – odpowiadamy, żeby zobaczyły, że trzeba zaktualizować.
+Wykrywanie (UDP DISCOVERY_PORT): b"MXSYNC6?" + JSON nadawcy -> odpowiedź JSON z /hello.
+Inne wersje (b"MXSYNC?", b"MXSYNC5?" …) dostają odpowiedź, żeby zobaczyły, że trzeba zaktualizować,
+ale bez wspólnego protokołu nie ma listy modów, plików .torrent ani transferów.
 Transfery: libtorrent (port w polu "lt"), prywatne torrenty v2 – po jednym na mod.
 """
 import hashlib
 import hmac
 
-PROTO = 5                   # 4: mod = pojedynczy plik .pkz, foldery z paczkami to grupy
+PROTO = 6                   # 4: mod = pojedynczy plik .pkz, foldery z paczkami to grupy
                             # 5: malowania / rękawice / gogle osobno także w rozpakowanych modach
+                            # 6: suma modu bez atrybutów plików (2.3.1) – starsze wersje odcięte
 MAGIC = f"MXSYNC{PROTO}"
 QUERY = MAGIC.encode() + b"?"
 OLD_QUERY = b"MXSYNC?"
@@ -29,6 +31,14 @@ HDR_AUTH = "X-MXSync-Auth"
 HDR_NAME = "X-MXSync-Name"
 HDR_PROTO = "X-MXSync-Proto"
 HDR_ID = "X-MXSync-Id"
+
+
+def proto_of(info):
+    """Wersja protokołu z /hello albo z UDP ("proto" albo numer w "magic"); 0 – nieznana."""
+    try:
+        return int(info.get("proto") or str(info.get("magic", ""))[6:] or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def make_proof(password, nonce):

@@ -11,7 +11,7 @@ from urllib.parse import quote
 import requests
 
 from core.library import Mod
-from core.protocol import HDR_AUTH, HDR_ID, HDR_NAME, HDR_PROTO, PROTO, make_proof
+from core.protocol import HDR_AUTH, HDR_ID, HDR_NAME, HDR_PROTO, PROTO, make_proof, proto_of
 from utils.netinfo import is_radmin_ip
 
 REFRESH = 4.0
@@ -32,7 +32,7 @@ class Player:
         self.size = 0
         self.protected = False
         self.nonce = ""
-        self.state = "łączę"        # łączę / online / offline / hasło / stara wersja
+        self.state = "łączę"        # łączę / online / offline / hasło / stara wersja / nowsza wersja
         self.last_seen = 0.0
         self.manual = False
         self.gossip = False         # znany tylko z listy innego gracza (jeszcze niepotwierdzony)
@@ -105,7 +105,8 @@ class Players:
         p.last_seen = time.monotonic()
         if info.get("old"):
             p.ip, p.http = ip, p.addrs[ip]
-            self._set(p, "stara wersja")
+            p.version = str(info.get("version") or "")[:16]
+            self._set(p, _other_version(info))
             return
         if p.ip is None or _better(ip, p.ip):
             p.ip, p.http = ip, p.addrs[ip]
@@ -149,7 +150,7 @@ class Players:
     def _loop(self):
         while not self._stop.is_set():
             for p in self.all():
-                if p.state != "stara wersja" and p.ip:
+                if p.state not in OTHER_VERSION and p.ip:
                     self._pool.submit(self._refresh, p)
             self._stop.wait(REFRESH)
 
@@ -171,8 +172,9 @@ class Players:
             if not p.manual and time.monotonic() - p.last_seen < OFFLINE_AFTER:
                 return              # chwilowy problem – UDP jeszcze go widzi
             return self._set(p, "offline")
-        if info.get("proto") != PROTO:
-            return self._set(p, "stara wersja")
+        if proto_of(info) != PROTO:
+            p.version = str(info.get("version") or "")[:16]
+            return self._set(p, _other_version(info))
         if info.get("id") == self.me_id:
             self._me_addrs.add((p.ip, p.http))
             with self._lock:
@@ -246,3 +248,11 @@ def _better(new, old):
     def rank(ip):
         return 2 if ip.startswith("127.") else (1 if is_radmin_ip(ip) else 0)
     return rank(new) < rank(old)
+
+
+OTHER_VERSION = ("stara wersja", "nowsza wersja")
+
+
+def _other_version(info):
+    """Inny protokół = żadnej wymiany modów; nowszy – to ja muszę zaktualizować."""
+    return "nowsza wersja" if proto_of(info) > PROTO else "stara wersja"

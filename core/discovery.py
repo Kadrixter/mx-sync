@@ -9,7 +9,7 @@ import socket
 import threading
 import time
 
-from core.protocol import DISCOVERY_PORT, MAGIC, OLD_QUERY, QUERY
+from core.protocol import DISCOVERY_PORT, MAGIC, OLD_QUERY, QUERY, proto_of
 from utils.netinfo import interfaces
 
 INTERVAL = 3.0
@@ -71,8 +71,9 @@ class Beacon(threading.Thread):
                     pass
 
     def _handle(self, s, data, addr):
-        if data.strip() == OLD_QUERY:
-            # stara wersja – niech zobaczy nas jako „nowszą wersję” i zaproponuje aktualizację
+        if data.strip() == OLD_QUERY or (data.startswith(b"MXSYNC") and not data.startswith(QUERY)
+                                         and b"?" in data[:10]):
+            # inna wersja – niech zobaczy, że trzeba zaktualizować (bez dalszej wymiany)
             try:
                 s.sendto(self._me(), addr)
             except OSError:
@@ -94,4 +95,5 @@ class Beacon(threading.Thread):
             return
         if isinstance(info, dict) and str(info.get("magic", "")).startswith("MXSYNC"):
             info["old"] = info.get("magic") != MAGIC
+            info["proto"] = proto_of(info)
             self.on_found(info, ip)

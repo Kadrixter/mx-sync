@@ -6,7 +6,8 @@ from gui.widgets import Ring
 from utils.fmt import fmt_size, fmt_speed, plural_mods
 
 STATE_TEXT = {"łączę": ("łączę…", T.MUTED), "offline": ("offline", T.FAINT),
-              "hasło": ("inne hasło grupy", T.YELLOW), "stara wersja": ("stara wersja MX Sync", T.RED)}
+              "hasło": ("inne hasło grupy", T.YELLOW), "stara wersja": ("stara wersja MX Sync – nie łączy się", T.RED),
+              "nowsza wersja": ("nowsza wersja – zaktualizuj MX Sync", T.YELLOW)}
 
 
 class NavItem(ctk.CTkFrame):
