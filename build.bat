@@ -3,7 +3,8 @@ rem Buduje dist\MXSync\ (PyInstaller, folder) i instalator dist\installer\MXSync
 rem Wymaga Inno Setup 6 (https://jrsoftware.org/isdl.php).
 cd /d "%~dp0"
 python -m pip install -r requirements.txt || goto :fail
-python -m PyInstaller --noconfirm --clean --onedir --windowed --name MXSync --collect-data customtkinter ^
+rem libtorrent ma gotowe paczki tylko dla Pythona 3.12 – uruchom z py -3.12, jeśli masz kilka wersji
+python -m PyInstaller --noconfirm --clean --onedir --windowed --name MXSync --collect-data customtkinter --hidden-import pystray._win32 ^
     --icon assets\icon.ico --add-data "assets\icon.ico;assets" --add-data "assets\wheel.png;assets" main.py || goto :fail
 for /f "tokens=2 delims==" %%v in ('findstr /b "VERSION" utils\version.py') do set VER=%%~v
 set VER=%VER: =%

@@ -18,6 +18,26 @@ RED = "#ff5a5a"
 YELLOW = "#ffd23f"
 ORANGE = "#ff9a4a"
 CYAN = "#38bdf8"            # Radmin VPN
+PURPLE = "#b48cff"
+SIDEBAR = "#111216"
+CARD = "#17191e"
+CARD_HOVER = "#1f2228"
+CARD_SEL = "#2a1f17"        # zaznaczona karta (ciepły odcień pomarańczu)
+BORDER = "#262930"
+FAINT = "#5d616b"
+
+# rodzaje modów: znaczek ASCII i kolor
+KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT), "Opony": ("o", "#c9ccd3"),
+              "Kask": ("^", CYAN), "Strój": ("~", GREEN), "Rider": ("@", PURPLE), "Inne": ("*", MUTED)}
+
+
+def percent_color(p):
+    """Kolor zgodności: zielony (dużo wspólnych modów) -> żółty -> pomarańczowy."""
+    if p >= 80:
+        return GREEN
+    if p >= 50:
+        return YELLOW
+    return ACCENT
 
 _KINDS = {
     "primary": (ACCENT, ACCENT_HOVER, "#111111"),

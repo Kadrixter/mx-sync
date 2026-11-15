@@ -123,5 +123,8 @@ class UpdateWatcher:
             self.banner.show(info)
         if info.tag != self._notified:
             self._notified = info.tag
-            if self.app.focus_displayof() is None:
+            tray = getattr(self.app, "tray", None)
+            if tray is not None and self.app.state() == "withdrawn":
+                tray.notify("Dostępna aktualizacja MX Sync", f"Wersja {info.tag} – otwórz MX Sync i kliknij pasek u góry")
+            elif self.app.focus_displayof() is None:
                 flash_taskbar(self.app)

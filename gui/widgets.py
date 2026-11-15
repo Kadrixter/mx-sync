@@ -1,13 +1,8 @@
-"""Własne widgety: animowany pasek postępu, lista z checkboxami, okno hasła."""
-import queue
-import threading
+"""Własne widgety: animowany pasek postępu i kółko z procentem."""
 import tkinter as tk
 
-import customtkinter as ctk
 
 from gui import theme as T
-from utils.files import entry_size
-from utils.fmt import fmt_size
 
 
 def _rr(x1, y1, x2, y2, r):
@@ -98,228 +93,47 @@ class AnimatedProgressBar(tk.Canvas):
             self.itemconfigure(self._shine, state="hidden")
 
 
-class SelectableList(ctk.CTkScrollableFrame):
-    """Lista elementów z checkboxem, ikoną, nazwą i rozmiarem.
-    Rozmiary folderów mogą być liczone w tle (autosize)."""
+class Ring(tk.Canvas):
+    """Kółko z procentem zgodności (łuk w kolorze zależnym od wartości)."""
 
-    def __init__(self, master, on_change=None, checkable=True, **kw):
-        kw.setdefault("fg_color", T.PANEL)
-        kw.setdefault("corner_radius", 10)
-        super().__init__(master, **kw)
-        self.on_change = on_change
-        self.checkable = checkable
-        self._rows = {}
-        self._extras = []           # nagłówki grup i inne wiersze bez checkboxa
-        self._gen = 0
-        self._jobs = queue.Queue()
-        self._results = queue.Queue()
-        self._worker = None
-        self._empty = ctk.CTkLabel(self, text="", text_color=T.MUTED, font=T.font(13))
-        self._poll_job = self.after(150, self._poll)
+    def __init__(self, master, size=48, width=5, bg=T.CARD, font_size=None):
+        super().__init__(master, width=size, height=size, bg=bg, highlightthickness=0, bd=0)
+        self.size, self.w = size, width
+        self.value = None
+        fs = font_size or max(9, size // 4)
+        self._font = (T.title_family(), -fs, "bold")
+        self._shown = 0.0
+        self._job = None
 
-    # ----- elementy -----
+    def set(self, value, text=None, color=None):
+        """value 0–100 albo None (nieznane – szare kółko z tekstem)."""
+        self.value, self._text, self._color = value, text, color
+        self._animate()
 
-    def add(self, key, name, is_dir, size=None, checked=False, badge=None, icon=None,
-            badge_color=None, enabled=True, sub=None, note=""):
-        if key in self._rows:
-            return
-        self._empty.pack_forget()
-        row = ctk.CTkFrame(self, fg_color=T.ROW, corner_radius=8)
-        row.pack(fill="x", padx=6, pady=3)
-        var = tk.BooleanVar(value=checked and enabled)
-        cb = None
-        if self.checkable:
-            cb = ctk.CTkCheckBox(row, text="", width=22, checkbox_width=20, checkbox_height=20,
-                                 variable=var, onvalue=True, offvalue=False,
-                                 command=self._changed, fg_color=T.ACCENT,
-                                 hover_color=T.ACCENT_HOVER, border_color=T.MUTED,
-                                 checkmark_color="#111111",
-                                 state="normal" if enabled else "disabled")
-            cb.pack(side="left", padx=(10, 2), pady=7)
-        icon_lbl = ctk.CTkLabel(row, text=icon or ("/" if is_dir else "-"), width=24, font=T.font(14),
-                                text_color=T.ACCENT if is_dir else T.MUTED)
-        icon_lbl.pack(side="left", padx=(8 if not cb else 2, 4), pady=7)
-        name_lbl = ctk.CTkLabel(row, text=T.shorten(name, 60 if sub else 80), anchor="w",
-                                font=T.font(13, "bold" if sub else "normal"),
-                                text_color=T.TEXT if enabled else T.MUTED)
-        name_lbl.pack(side="left")
-        widgets = [row, icon_lbl, name_lbl]
-        if sub:
-            sub_lbl = ctk.CTkLabel(row, text=T.shorten(sub, 50), anchor="w", font=T.font(11),
-                                   text_color=T.MUTED)
-            sub_lbl.pack(side="left", padx=(8, 0))
-            widgets.append(sub_lbl)
-        # mała zielona notka (np. „2 osoby mają tego moda”) – zmieniana przez set_note()
-        note_lbl = ctk.CTkLabel(row, text=note, anchor="w", font=T.font(11), text_color=T.GREEN)
-        note_lbl.pack(side="left", padx=(10, 0))
-        widgets.append(note_lbl)
-        size_lbl = ctk.CTkLabel(row, text=fmt_size(size), width=95, anchor="e",
-                                font=T.font(12), text_color=T.MUTED)
-        size_lbl.pack(side="right", padx=(6, 14))
-        widgets.append(size_lbl)
-        if badge:
-            b = ctk.CTkLabel(row, text=badge, font=T.font(11, "bold"), text_color=badge_color or T.ORANGE)
-            b.pack(side="right", padx=4)
-            widgets.append(b)
-        if cb and enabled:
-            for w in widgets:
-                w.bind("<Button-1>", lambda e, c=cb: c.toggle())
-        self._rows[key] = {"frame": row, "var": var, "size": size, "size_lbl": size_lbl, "note": note_lbl,
-                           "is_dir": is_dir, "name": name, "enabled": enabled}
+    def _animate(self):
+        target = self.value or 0
+        diff = target - self._shown
+        self._shown = target if abs(diff) < 0.5 else self._shown + diff * 0.25
+        self._draw()
+        if self._shown != target:
+            self._job = self.after(30, self._animate)
 
-    def add_header(self, text, count_text="", button_text=None, command=None):
-        """Nagłówek grupy (np. „> MOTORY”) z opcjonalnym przyciskiem „Zaznacz grupę”."""
-        self._empty.pack_forget()
-        bar = ctk.CTkFrame(self, fg_color="transparent")
-        bar.pack(fill="x", padx=8, pady=(10 if self._extras or self._rows else 4, 2))
-        ctk.CTkLabel(bar, text=text, font=T.title_font(15), text_color=T.ACCENT, anchor="w").pack(side="left")
-        if count_text:
-            ctk.CTkLabel(bar, text=count_text, font=T.font(12), text_color=T.MUTED).pack(side="left", padx=8)
-        btn = None
-        if button_text and command:
-            btn = T.button(bar, button_text, command, width=130, height=26, font=T.font(12))
-            btn.pack(side="right", padx=4)
-        line = ctk.CTkFrame(self, fg_color=T.ACCENT, height=2, corner_radius=1)
-        line.pack(fill="x", padx=10, pady=(0, 4))
-        self._extras += [bar, line]
-        return btn
-
-    def add_note(self, text):
-        lbl = ctk.CTkLabel(self, text=text, text_color=T.MUTED)
-        lbl.pack(pady=6)
-        self._extras.append(lbl)
-
-    def set_keys(self, keys, value):
-        for k in keys:
-            r = self._rows.get(k)
-            if r:
-                r["var"].set(value and r.get("enabled", True))
-        self._changed()
-
-    def autosize(self, key, path):
-        if self._worker is None:
-            self._worker = threading.Thread(target=self._size_worker, daemon=True)
-            self._worker.start()
-        self._jobs.put((self._gen, key, path))
-
-    def set_size(self, key, size):
-        r = self._rows.get(key)
-        if r:
-            r["size"] = size
-            r["size_lbl"].configure(text=fmt_size(size))
-
-    def set_note(self, key, text):
-        r = self._rows.get(key)
-        if r and r["note"].cget("text") != text:
-            r["note"].configure(text=text)
-
-    def clear(self, empty_text=""):
-        for r in self._rows.values():
-            r["frame"].destroy()
-        for w in self._extras:
-            w.destroy()
-        self._rows = {}
-        self._extras = []
-        self._gen += 1
-        self.set_empty_text(empty_text)
-
-    def set_empty_text(self, text):
-        self._empty.configure(text=text)
-        if text and not self._rows:
-            self._empty.pack(pady=40)
-        else:
-            self._empty.pack_forget()
-
-    # ----- zaznaczenie -----
-
-    def keys(self):
-        return list(self._rows)
-
-    def selected(self):
-        return [k for k, r in self._rows.items() if r["var"].get()]
-
-    def size_of(self, keys):
-        """(suma, czy_wszystko_policzone)"""
-        sizes = [self._rows[k]["size"] for k in keys if k in self._rows]
-        return sum(s or 0 for s in sizes), all(s is not None for s in sizes)
-
-    def set_all(self, value):
-        for r in self._rows.values():
-            r["var"].set(value and r.get("enabled", True))
-        self._changed()
-
-    def _changed(self):
-        if self.on_change:
-            self.on_change()
-
-    # ----- liczenie rozmiarów w tle -----
-
-    def _size_worker(self):
-        while True:
-            gen, key, path = self._jobs.get()
-            if gen != self._gen:
-                continue
-            self._results.put((gen, key, entry_size(path)))
-
-    def _poll(self):
-        changed = False
-        try:
-            while True:
-                gen, key, size = self._results.get_nowait()
-                if gen == self._gen:
-                    self.set_size(key, size)
-                    changed = True
-        except queue.Empty:
-            pass
-        if changed:
-            self._changed()
-        self._poll_job = self.after(150, self._poll)
+    def _draw(self):
+        self.delete("all")
+        s, w = self.size, self.w
+        pad = w / 2 + 1
+        self.create_oval(pad, pad, s - pad, s - pad, outline=T.TRACK, width=w)
+        if self.value is not None and self._shown > 0:
+            color = self._color or T.percent_color(self.value)
+            extent = -359.9 * self._shown / 100
+            self.create_arc(pad, pad, s - pad, s - pad, start=90, extent=extent, style="arc",
+                            outline=color, width=w)
+        text = self._text if self._text is not None else (f"{round(self._shown)}%" if self.value is not None else "?")
+        self.create_text(s / 2, s / 2 + 1, text=text, fill=T.TEXT if self.value is not None else T.MUTED,
+                         font=self._font)
 
     def destroy(self):
-        if self._poll_job:
-            self.after_cancel(self._poll_job)
-            self._poll_job = None
-        self._gen += 1
+        if self._job:
+            self.after_cancel(self._job)
+            self._job = None
         super().destroy()
-
-
-class PasswordDialog(ctk.CTkToplevel):
-    def __init__(self, master, title, message, error=None):
-        super().__init__(master, fg_color=T.BG)
-        self.title(title)
-        self.geometry("380x210")
-        self.resizable(False, False)
-        self.transient(master.winfo_toplevel())
-        self.result = None
-        ctk.CTkLabel(self, text=message, font=T.font(14, "bold"), text_color=T.TEXT,
-                     wraplength=340).pack(pady=(20, 6), padx=20)
-        if error:
-            ctk.CTkLabel(self, text=error, font=T.font(12), text_color=T.RED).pack()
-        self.entry = ctk.CTkEntry(self, show="•", width=300, height=36, placeholder_text="Hasło")
-        self.entry.pack(pady=10)
-        btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.pack(pady=6)
-        T.button(btns, "Anuluj", self.destroy, width=120).pack(side="left", padx=6)
-        T.button(btns, "OK", self._ok, kind="primary", width=120).pack(side="left", padx=6)
-        self.entry.bind("<Return>", lambda e: self._ok())
-        self.bind("<Escape>", lambda e: self.destroy())
-        self.after(120, self._focus)
-
-    def _focus(self):
-        self.lift()
-        self.focus_force()
-        self.entry.focus_set()
-        try:
-            self.grab_set()
-        except tk.TclError:
-            pass
-
-    def _ok(self):
-        self.result = self.entry.get()
-        self.destroy()
-
-    @classmethod
-    def ask(cls, master, title, message, error=None):
-        d = cls(master, title, message, error)
-        master.wait_window(d)
-        return d.result

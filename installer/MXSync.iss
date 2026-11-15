@@ -1,4 +1,4 @@
-﻿; Instalator MX Sync (Inno Setup 6).
+﻿; Instalator MX Sync (Inno Setup 6). Uwaga: libtorrent wymaga Pythona 3.12 przy budowaniu.
 ; Budowanie: najpierw PyInstaller --onedir (dist\MXSync\), potem:
 ;   ISCC.exe /DAppVersion=1.3.0 installer\MXSync.iss   ->  dist\installer\MXSync-Setup-1.3.0.exe
 ;
@@ -80,6 +80,10 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{
 ; uruchom po instalacji (przy aktualizacji z aplikacji – /SILENT – też, bez pytania)
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
   Flags: nowait postinstall runasoriginaluser
+
+[Registry]
+; autostart ustawiany w programie (Ustawienia) – przy odinstalowaniu usuwamy wpis
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "MX Sync"; Flags: uninsdeletevalue
 
 [UninstallRun]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#FwRule}"""; \
