@@ -73,7 +73,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Budowanie pliku `.exe`: uruchom `build.bat` – wynik trafi do `dist\MXSync.exe`.
+Budowanie instalatora: uruchom `build.bat` – wynik trafi do `dist\installer\MXSync-Setup-X.Y.Z.exe`.
 
 ## Porty
 
