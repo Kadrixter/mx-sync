@@ -5,7 +5,9 @@ Host to serwer HTTP (zgodny ze starym klientem v3):
   GET /status             -> {"scanning", "scanned", "done", "total", ...}
   GET /index              -> {"ścieżka/względna": {"size", "hash"}}  (503 podczas skanowania)
   GET /download/<rel>     -> bajty pliku, obsługuje nagłówek Range (wznawianie)
-  GET /ping?state&total   -> klient zgłasza, co robi (lista klientów u hosta)
+  GET /ping?state&total&done&peer -> klient zgłasza, co robi (lista klientów u hosta)
+                             i port swojego serwera P2P
+  GET /peers              -> [{"name", "ip", "port"}] inni klienci udostępniający mody (P2P)
   GET /bye                -> klient się rozłącza
 Hasło: nagłówek X-MXSync-Auth = HMAC-SHA256(hasło, nonce) – hasło nie idzie przez sieć.
 Wykrywanie: klient wysyła UDP "MXSYNC?" (broadcast), host odpowiada JSON-em.
@@ -17,6 +19,7 @@ MAGIC = "MXSYNC1"
 QUERY = b"MXSYNC?"
 DISCOVERY_PORT = 50515
 HTTP_PORT = 8888
+PEER_PORT = 8900          # serwer P2P klienta (kolejny wolny, jeśli zajęty)
 CHUNK = 256 * 1024
 
 HDR_CLIENT = "X-MXSync-Client"

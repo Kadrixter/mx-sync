@@ -4,11 +4,9 @@ Sprawdzanie: najpierw indeks hosta, potem MD5 liczone TYLKO dla plików o zgodny
 rozmiarze (brakujące / inny rozmiar od razu idą do pobrania), z cache hashy.
 Pliki z indeksu są grupowane w mody (mapa, motor, kask…) – klient widzi, które mody
 hosta ma aktualne, a których brakuje, i pobiera tylko wybrane.
-Pobieranie: plik .part, wznawianie (Range), ponawianie z odczekaniem, MD5 w locie.
+Pobieranie (z hosta i innych klientów naraz) jest w net/swarm.py.
 """
-import hashlib
 import os
-import shutil
 import socket
 import threading
 import time
@@ -18,14 +16,13 @@ from urllib.parse import quote
 import requests
 from requests.adapters import HTTPAdapter
 
-from net.protocol import CHUNK, HDR_AUTH, HDR_CLIENT, MAGIC, make_proof
+from net.peer import PeerServer
+from net.protocol import HDR_AUTH, HDR_CLIENT, MAGIC, make_proof
 from utils.config import CLIENT_CACHE
 from utils.files import mods_rel, resolve_mods_root, safe_join
-from utils.fmt import fmt_size
-from utils.hashing import HASH_CHUNK, Cancelled, HashCache, md5_file
+from utils.hashing import Cancelled, HashCache, md5_file
 from utils.speed import SpeedMeter
 
-RETRIES = 4
 HASH_WORKERS = 4
 HEARTBEAT = 3.0
 
@@ -50,6 +47,8 @@ class HostConnection:
         self.legacy = False          # stary host v3 (bez /hello i /ping)
         self.nonce = ""
         self.state, self.total = "połączony", 0
+        self.done_fn = None          # ile już pobrano (ustawia pobieranie) – host pokazuje postęp
+        self.peer = None             # serwer P2P – udostępnia moje mody innym klientom
         self._closed = threading.Event()
         self.sess = requests.Session()
         self.sess.mount("http://", HTTPAdapter(pool_connections=16, pool_maxsize=16))
@@ -58,7 +57,12 @@ class HostConnection:
         except BaseException:
             self.sess.close()
             raise
+        if not self.legacy:
+            self.peer = PeerServer(self.headers().get(HDR_AUTH))
+            if not self.peer.start():
+                self.peer = None
         threading.Thread(target=self._heartbeat, daemon=True).start()
+        self._ping()
 
     def _hello(self):
         r = self.sess.get(self.base + "/hello", timeout=(5, 10))
@@ -100,10 +104,25 @@ class HostConnection:
     def _ping(self):
         if self.legacy or self._closed.is_set():
             return
+        params = {"state": self.state, "total": self.total,
+                  "peer": self.peer.port if self.peer else 0}
+        if self.done_fn:
+            params["done"] = int(self.done_fn())
         try:
-            self.get("/ping", params={"state": self.state, "total": self.total}, timeout=3).close()
+            self.get("/ping", params=params, timeout=3).close()
         except requests.RequestException:
             pass
+
+    def peers(self):
+        """Inni klienci tego hosta z serwerem P2P: [{"name", "ip", "port"}]."""
+        if self.legacy:
+            return []
+        try:
+            r = self.get("/peers", timeout=(3, 5))
+            data = r.json() if r.status_code == 200 else []
+        except (requests.RequestException, ValueError):
+            return []
+        return [p for p in data if isinstance(p, dict) and p.get("ip") and p.get("port")]
 
     def _heartbeat(self):
         while not self._closed.wait(HEARTBEAT):
@@ -113,6 +132,8 @@ class HostConnection:
         if self._closed.is_set():
             return
         self._closed.set()
+        if self.peer:
+            self.peer.stop()
 
         def bye():
             if not self.legacy:
@@ -130,8 +151,32 @@ CATEGORY_DIRS = {
     "enduro", "supermoto", "arenacross", "freestyle", "paints", "helmets", "boots", "gloves",
     "goggles", "protections", "neckbraces", "bodies", "models", "sounds", "skins", "gear",
 }
-CATEGORY_LABELS = {"tracks": "Mapa", "bikes": "Motor", "rider": "Rider", "riders": "Rider",
-                   "tyres": "Opony", "misc": "Inne"}
+# rodzaj modu z najgłębszego folderu-kategorii w ścieżce ('rider/helmets/X' -> Kask)
+CATEGORY_LABELS = {"tracks": "Mapa", "motocross": "Mapa", "supercross": "Mapa", "enduro": "Mapa",
+                   "supermoto": "Mapa", "arenacross": "Mapa", "freestyle": "Mapa",
+                   "bikes": "Motor", "paints": "Motor", "sounds": "Motor", "models": "Motor",
+                   "tyres": "Opony",
+                   "helmets": "Kask",
+                   "boots": "Strój", "gloves": "Strój", "goggles": "Strój", "protections": "Strój",
+                   "neckbraces": "Strój", "gear": "Strój", "skins": "Strój",
+                   "rider": "Rider", "riders": "Rider", "bodies": "Rider",
+                   "misc": "Inne"}
+# grupy na liście modów (kolejność wyświetlania)
+KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Opony", "Opony"), ("Kask", "Kaski"),
+               ("Strój", "Stroje"), ("Rider", "Ridery"), ("Inne", "Inne")]
+
+
+def mod_kind(key):
+    parts = [p.lower() for p in key.split("/")[:-1]]
+    first = parts[0] if parts else ""
+    for p in reversed(parts):
+        kind = CATEGORY_LABELS.get(p)
+        # 'tracks/enduro' to mapa, ale 'bikes/enduro' to motor – foldery dyscyplin liczą się tylko przy mapach
+        if kind == "Mapa" and p != "tracks" and first != "tracks":
+            continue
+        if kind:
+            return kind
+    return "Inne"
 
 
 def local_path(folder, rel):
@@ -157,8 +202,7 @@ class ModGroup:
         parts = key.split("/")
         self.name = parts[-1]
         self.path = "/".join(parts[:-1])
-        cat = parts[0].lower() if len(parts) > 1 else ""
-        self.kind = CATEGORY_LABELS.get(cat, "Mod")
+        self.kind = mod_kind(key)
         self.files = 0
         self.size = 0
         self.todo = []           # FileItem do pobrania
@@ -332,168 +376,3 @@ def group_mods(index, todo):
         groups[mod_key(f.rel)].todo.append(f)
     order = {"brakuje": 0, "nieaktualny": 1, "aktualny": 2}
     return sorted(groups.values(), key=lambda g: (order[g.status], g.kind, g.name.lower()))
-
-
-class DownloadJob(threading.Thread):
-    """Pobiera listę plików równolegle; postęp w atrybutach (czytane przez GUI)."""
-
-    def __init__(self, conn, folder, files, parallel=3):
-        super().__init__(daemon=True)
-        self.conn, self.folder = conn, resolve_mods_root(folder)
-        self.files = sorted(files, key=lambda f: f.size, reverse=True)   # duże najpierw
-        self.parallel = max(1, min(8, parallel))
-        self.total = sum(f.size for f in files)
-        self.done_bytes = 0
-        self.files_done = 0
-        self.failed = 0
-        self.active = []
-        self.meter = SpeedMeter()
-        self.stop = threading.Event()
-        self.lock = threading.Lock()
-        self.finished = False
-        self.cancelled = False
-        self.error = None
-        self.cache = None
-
-    def cancel(self):
-        self.stop.set()
-
-    def run(self):
-        try:
-            try:
-                free = shutil.disk_usage(self.folder).free
-                need = sum(f.size - f.done for f in self.files)
-                if need > free:
-                    self.error = f"Za mało miejsca na dysku: potrzeba {fmt_size(need)}, wolne {fmt_size(free)}"
-                    return
-            except OSError:
-                pass
-            self.cache = HashCache(CLIENT_CACHE)
-            self.conn.set_state("pobiera", self.total)
-            with ThreadPoolExecutor(max_workers=self.parallel) as ex:
-                list(ex.map(self._one, self.files))
-            self.cache.save()
-            self.cancelled = self.stop.is_set()
-            if self.cancelled:
-                self.conn.set_state("przerwał pobieranie")
-            else:
-                self.conn.set_state("zakończono" if not self.failed else "zakończono z błędami")
-        except Exception as e:
-            self.error = str(e) or e.__class__.__name__
-        finally:
-            if self.stop.is_set():
-                self.cancelled = True
-            self.finished = True
-
-    def _set_done(self, f, value):
-        with self.lock:
-            self.done_bytes += value - f.done
-            f.done = value
-
-    def _one(self, f):
-        if self.stop.is_set():
-            return
-        with self.lock:
-            self.active.append(f)
-        try:
-            try:
-                dest = local_path(self.folder, f.rel)
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-            except (ValueError, OSError) as e:
-                f.status = "błąd"
-                self._failed(e)
-                return
-            url = "/download/" + quote(f.rel)
-            last = ""
-            for attempt in range(1, RETRIES + 1):
-                if self.stop.is_set():
-                    f.status = "przerwano"
-                    return
-                f.status = "pobieranie"
-                try:
-                    self._attempt(url, dest, f)
-                    f.status = "gotowe"
-                    with self.lock:
-                        self.files_done += 1
-                    return
-                except Cancelled:
-                    f.status = "przerwano"
-                    return
-                except (requests.RequestException, OSError) as e:
-                    last = str(e)
-                    if attempt < RETRIES:
-                        f.status = "ponawiam…"
-                        self.stop.wait(min(2 ** attempt, 10))
-            f.status = "błąd"
-            self._failed(last)
-        finally:
-            with self.lock:
-                self.active.remove(f)
-
-    def _failed(self, err):
-        with self.lock:
-            self.failed += 1
-
-    def _attempt(self, url, dest, f):
-        part = dest + ".part"
-        h = hashlib.md5()
-        have = 0
-        if os.path.exists(part):
-            have = os.path.getsize(part)
-            if have > f.size:
-                os.remove(part)
-                have = 0
-            elif have:
-                with open(part, "rb") as src:
-                    read = 0
-                    while True:
-                        b = src.read(HASH_CHUNK)
-                        if not b:
-                            break
-                        h.update(b)
-                        read += len(b)
-                        self._set_done(f, read)
-                        if self.stop.is_set():
-                            raise Cancelled()
-        self._set_done(f, have)
-
-        if have < f.size:
-            headers = {"Range": f"bytes={have}-"} if have else {}
-            r = self.conn.get(url, stream=True, headers=headers, timeout=(10, 30))
-            try:
-                if r.status_code == 416:
-                    os.remove(part)
-                    self._set_done(f, 0)
-                    raise IOError("Zły zakres, zaczynam od nowa")
-                if r.status_code == 200 and have:
-                    have = 0                    # host zignorował Range
-                    h = hashlib.md5()
-                    self._set_done(f, 0)
-                elif r.status_code not in (200, 206):
-                    raise IOError(f"HTTP {r.status_code}")
-                got = have
-                with open(part, "ab" if have else "wb", buffering=CHUNK) as out:
-                    for chunk in r.iter_content(chunk_size=CHUNK):
-                        if self.stop.is_set():
-                            raise Cancelled()
-                        if not chunk:
-                            continue
-                        out.write(chunk)
-                        h.update(chunk)
-                        got += len(chunk)
-                        self.meter.add(len(chunk))
-                        self._set_done(f, got)
-                if got != f.size:
-                    raise IOError(f"Połączenie przerwane ({fmt_size(got)} z {fmt_size(f.size)})")
-            finally:
-                r.close()
-
-        if h.hexdigest() != f.hash:
-            os.remove(part)
-            self._set_done(f, 0)
-            raise IOError("Zły hash – pobieram od nowa")
-        os.replace(part, dest)
-        try:
-            self.cache.put(os.path.abspath(dest), os.stat(dest), f.hash)
-        except OSError:
-            pass

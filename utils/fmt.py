@@ -25,9 +25,17 @@ def fmt_eta(seconds):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-def plural_files(n):
+def _plural(n, one, few, many):
     if n == 1:
-        return "1 plik"
+        return f"1 {one}"
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return f"{n} pliki"
-    return f"{n} plików"
+        return f"{n} {few}"
+    return f"{n} {many}"
+
+
+def plural_files(n):
+    return _plural(n, "plik", "pliki", "plików")
+
+
+def plural_mods(n):
+    return _plural(n, "mod", "mody", "modów")

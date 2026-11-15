@@ -370,7 +370,10 @@ class HostRunView(View):
                              text_color=T.MUTED, font=T.font(12)).pack(side="left", padx=6)
                 state = ctk.CTkLabel(frame, text="", font=T.font(12))
                 state.pack(side="right", padx=12)
-                r = self._client_rows[s["id"]] = {"frame": frame, "state": state}
+                p2p = ctk.CTkLabel(frame, text="", font=T.font(11, "bold"), text_color=T.CYAN)
+                p2p.pack(side="right", padx=4)
+                r = self._client_rows[s["id"]] = {"frame": frame, "state": state, "p2p": p2p}
+            r["p2p"].configure(text="⇅ P2P" if s.get("p2p") else "")
             st = s["state"]
             color = (T.ACCENT if st == "pobiera" else T.YELLOW if st == "sprawdza mody"
                      else T.GREEN if st.startswith("zakończ") or st == "aktualny" else T.MUTED)
@@ -402,7 +405,7 @@ class HostRunView(View):
                 info = ctk.CTkLabel(frame, text="", font=T.font(11), text_color=T.MUTED, anchor="w")
                 info.pack(fill="x", padx=12, pady=(0, 8))
                 r = self._transfer_rows[s["id"]] = {"frame": frame, "bar": bar, "speed": speed, "info": info}
-            total, sent = s["total"], s["sent"]
+            total, sent = s["total"], s.get("progress", s["sent"])
             done = s["state"].startswith("zakończ")
             if total:
                 sent = min(sent, total)

@@ -24,6 +24,14 @@ Przy pierwszym uruchomieniu hosta Windows zapyta o zaporę – zezwól na dostę
   dostaje status **brakuje**, **nieaktualny** albo **aktualny**
 - pobierasz tylko zaznaczone mody, a z nich tylko brakujące / zmienione pliki (nie wszystko naraz);
   zakładka „Wszystkie mody hosta” pokazuje pełną listę tego, co host udostępnia
+- mody pogrupowane: **Mapy, Motory, Opony, Kaski, Stroje, Ridery, Inne** – przyciski grup z liczbą modów,
+  nagłówki na liście i „Zaznacz grupę”
+- 🔍 wyszukiwarka modów (po nazwie i ścieżce, kilka słów naraz, Esc czyści)
+- **P2P jak torrent**: każdy klient udostępnia innym klientom tego samego hosta mody, które ma aktualne.
+  Gdy ktoś pobiera moda, którego mają też inni gracze, plik jest dzielony na kawałki po 4 MB i pobierany
+  naraz z hosta i ze wszystkich tych graczy (gracze dołączający w trakcie też są dokładani jako źródła).
+  Każdy plik jest na końcu sprawdzany MD5 – jeśli coś od innego gracza się nie zgadza, plik idzie od nowa z hosta.
+  Udostępniane są tylko pliki zweryfikowane (nigdy `.part`), z tym samym hasłem co host.
 - sprawdzanie: hashuje tylko pliki o zgodnym rozmiarze, z cache – kolejne sprawdzenia trwają sekundy
 - pobieranie równoległe (1–8), animowane paski postępu, prędkość, pozostały czas, status każdego pliku
 - wznawianie przerwanych pobrań (pliki `.part`), automatyczne ponawianie, weryfikacja MD5, sprawdzanie miejsca na dysku
@@ -59,13 +67,17 @@ Budowanie pliku `.exe`: uruchom `build.bat` – wynik trafi do `dist\MXSync.exe`
 |------|----------|--------------|
 | 50515 | UDP | wyszukiwanie hostów |
 | 8888 | TCP (HTTP) | indeks modów i pobieranie (kolejny wolny, jeśli zajęty) |
+| 8900 | TCP (HTTP) | P2P – klient udostępnia mody innym klientom (kolejny wolny, jeśli zajęty) |
+
+Przy pierwszym połączeniu klienta Windows też może zapytać o zaporę – zezwól, żeby inni gracze mogli pobierać od Ciebie (P2P).
 
 ## Struktura
 
 ```
 main.py          start aplikacji
 gui/             ekrany (start, host, klient), widgety, motyw
-net/             protokół, wykrywanie hostów, serwer hosta, klient (sprawdzanie + pobieranie)
+net/             protokół, wykrywanie hostów, serwer hosta, klient (sprawdzanie),
+                 peer.py (serwer P2P klienta), swarm.py (pobieranie z wielu źródeł naraz)
 utils/           rozmiary, hashe + cache, pomiar prędkości, interfejsy sieciowe / Radmin VPN, ustawienia
 assets/          ikona (koło MX), logo wheel.png i skrypt, który je generuje
 ```

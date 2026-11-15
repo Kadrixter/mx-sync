@@ -42,6 +42,8 @@ class ClientSession:
         self.files_done = 0
         self.current = ""
         self.active = 0         # pobierania w toku
+        self.done = 0           # ile klient już ma (z /ping – liczy też kawałki od innych klientów)
+        self.peer_port = 0      # port serwera P2P klienta (0 = nie udostępnia)
         self.meter = SpeedMeter()
 
 
@@ -265,8 +267,26 @@ class ModServer:
                     continue
                 out.append({"id": s.id, "name": s.name, "ip": s.ip, "connected_at": s.connected_at,
                             "state": s.state, "total": s.total, "sent": s.sent, "current": s.current,
+                            "progress": max(s.sent, s.done), "p2p": bool(s.peer_port),
                             "files_done": s.files_done, "active": s.active, "speed": s.meter.speed()})
         out.sort(key=lambda s: s["id"])
+        return out
+
+    def peers(self, handler):
+        """Inni klienci z serwerem P2P (bez pytającego). Klient na komputerze hosta
+        (127.0.0.1) dostaje adres hosta widziany przez pytającego."""
+        me = (handler.client_address[0], unquote(handler.headers.get(HDR_CLIENT, "")) or handler.client_address[0])
+        host_ip = handler.connection.getsockname()[0]
+        now = time.monotonic()
+        out = []
+        with self._lock:
+            for k, s in self._sessions.items():
+                if k == me or not s.peer_port or now - s.last_seen > SESSION_TTL:
+                    continue
+                ip = s.ip
+                if ip.startswith("127.") and not me[0].startswith("127."):
+                    ip = host_ip
+                out.append({"name": s.name, "ip": ip, "port": s.peer_port})
         return out
 
     def total_speed(self):
@@ -341,13 +361,18 @@ def _make_handler(srv):
                 state = q.get("state", [""])[0]
                 if state:
                     if state == "pobiera" and sess.state != "pobiera":
-                        sess.sent = sess.files_done = 0
+                        sess.sent = sess.files_done = sess.done = 0
                     sess.state = state
-                try:
-                    sess.total = int(q.get("total", [sess.total])[0])
-                except ValueError:
-                    pass
+                for field in ("total", "done", "peer_port"):
+                    key = "peer" if field == "peer_port" else field
+                    try:
+                        setattr(sess, field, int(q.get(key, [getattr(sess, field)])[0]))
+                    except ValueError:
+                        pass
                 return self._json({"ok": True})
+            if path == "/peers":
+                srv.session(self)
+                return self._json(srv.peers(self))
             if path == "/bye":
                 srv.drop_session(self)
                 return self._json({"ok": True})
@@ -368,7 +393,7 @@ def _make_handler(srv):
             except OSError:
                 return self._json({"error": "Plik nie istnieje"}, 404)
 
-            start, end, partial = 0, size - 1, False
+            start, end, partial, resume = 0, size - 1, False, False
             rng = self.headers.get("Range")
             m = re.match(r"bytes=(\d*)-(\d*)", rng.strip()) if rng else None
             if m and size > 0:
@@ -377,6 +402,8 @@ def _make_handler(srv):
                     start = int(a)
                     if b:
                         end = min(int(b), size - 1)
+                    else:
+                        resume = True       # 'bytes=N-' = wznowienie; kawałki P2P mają koniec zakresu
                 elif b:
                     start = max(0, size - int(b))
                 partial = True
@@ -403,7 +430,8 @@ def _make_handler(srv):
             with srv._lock:
                 sess.active += 1
                 sess.current = rel.replace("\\", "/")
-                sess.sent += start          # wznowienie: ta część jest już u klienta
+                if resume:
+                    sess.sent += start      # wznowienie: ta część jest już u klienta
                 if sess.state not in ("pobiera",):
                     sess.state = "pobiera"
             pos, done = start, False

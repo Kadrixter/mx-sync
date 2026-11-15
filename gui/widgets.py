@@ -109,6 +109,7 @@ class SelectableList(ctk.CTkScrollableFrame):
         self.on_change = on_change
         self.checkable = checkable
         self._rows = {}
+        self._extras = []           # nagłówki grup i inne wiersze bez checkboxa
         self._gen = 0
         self._jobs = queue.Queue()
         self._results = queue.Queue()
@@ -162,6 +163,35 @@ class SelectableList(ctk.CTkScrollableFrame):
         self._rows[key] = {"frame": row, "var": var, "size": size, "size_lbl": size_lbl,
                            "is_dir": is_dir, "name": name, "enabled": enabled}
 
+    def add_header(self, text, count_text="", button_text=None, command=None):
+        """Nagłówek grupy (np. „🏍 Motory”) z opcjonalnym przyciskiem „Zaznacz grupę”."""
+        self._empty.pack_forget()
+        bar = ctk.CTkFrame(self, fg_color="transparent")
+        bar.pack(fill="x", padx=8, pady=(10 if self._extras or self._rows else 4, 2))
+        ctk.CTkLabel(bar, text=text, font=T.title_font(15), text_color=T.ACCENT, anchor="w").pack(side="left")
+        if count_text:
+            ctk.CTkLabel(bar, text=count_text, font=T.font(12), text_color=T.MUTED).pack(side="left", padx=8)
+        btn = None
+        if button_text and command:
+            btn = T.button(bar, button_text, command, width=130, height=26, font=T.font(12))
+            btn.pack(side="right", padx=4)
+        line = ctk.CTkFrame(self, fg_color=T.ACCENT, height=2, corner_radius=1)
+        line.pack(fill="x", padx=10, pady=(0, 4))
+        self._extras += [bar, line]
+        return btn
+
+    def add_note(self, text):
+        lbl = ctk.CTkLabel(self, text=text, text_color=T.MUTED)
+        lbl.pack(pady=6)
+        self._extras.append(lbl)
+
+    def set_keys(self, keys, value):
+        for k in keys:
+            r = self._rows.get(k)
+            if r:
+                r["var"].set(value and r.get("enabled", True))
+        self._changed()
+
     def autosize(self, key, path):
         if self._worker is None:
             self._worker = threading.Thread(target=self._size_worker, daemon=True)
@@ -177,7 +207,10 @@ class SelectableList(ctk.CTkScrollableFrame):
     def clear(self, empty_text=""):
         for r in self._rows.values():
             r["frame"].destroy()
+        for w in self._extras:
+            w.destroy()
         self._rows = {}
+        self._extras = []
         self._gen += 1
         self.set_empty_text(empty_text)
 
