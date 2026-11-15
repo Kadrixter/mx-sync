@@ -118,8 +118,9 @@ class TopBar(ctk.CTkFrame):
         lib = node.library
         mods = lib.snapshot()
         self.me.configure(text=f"Ty: {T.shorten(node.name, 24)}")
+        net = node.direct.status()[0]
         self.me_sub.configure(text=f"{plural_mods(len(mods))}  ·  {fmt_size(sum(m.size for m in mods.values()))}"
-                                   f"  ·  udostępniasz wszystko")
+                                   f"  ·  udostępniasz wszystko  ·  {net}")
         if lib.error:
             self.status.configure(text="  ustaw folder modów  ", text_color=T.RED)
         elif lib.scanning:

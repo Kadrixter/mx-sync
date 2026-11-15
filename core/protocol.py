@@ -5,6 +5,10 @@ HTTP (port HTTP_PORT, kolejny wolny):
   GET /library          -> gzip JSON {"rev", "mods": {klucz: [infohash, rozmiar, pliki]}}
   GET /torrent/<ih>     -> plik .torrent modu
   GET /show             -> (tylko z 127.0.0.1) druga instancja prosi o pokazanie okna
+  GET /reach            -> {"ok"} – próbuję połączyć się z publicznym adresem pytającego (test portu)
+  GET /punch?ih=a,b     -> łączę się z publicznym adresem pytającego dla tych modów (hole punching)
+/hello z poprawnym hasłem zawiera też "wan": [publiczne ip, port] (połączenia bezpośrednie, MX Sync 2.3).
+Nagłówek X-MXSync-Id = id pytającego (do /reach i /punch).
 Hasło grupy: nagłówek X-MXSync-Auth = HMAC-SHA256(hasło, nonce adresata) – hasło nie idzie przez sieć.
 Wykrywanie (UDP DISCOVERY_PORT): b"MXSYNC5?" + JSON nadawcy -> odpowiedź JSON z /hello.
 Stare wersje (1.x) pytają b"MXSYNC?" – odpowiadamy, żeby zobaczyły, że trzeba zaktualizować.
@@ -24,6 +28,7 @@ HTTP_PORT = 8888
 HDR_AUTH = "X-MXSync-Auth"
 HDR_NAME = "X-MXSync-Name"
 HDR_PROTO = "X-MXSync-Proto"
+HDR_ID = "X-MXSync-Id"
 
 
 def make_proof(password, nonce):

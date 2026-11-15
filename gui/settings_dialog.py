@@ -1,9 +1,10 @@
-"""Ustawienia: nazwa gracza, folder modów, hasło grupy, limity prędkości, zasobnik i autostart."""
+"""Ustawienia: nazwa gracza, folder modów, hasło grupy, limity prędkości, połączenie bezpośrednie, zasobnik."""
 from tkinter import filedialog
 
 import customtkinter as ctk
 
 from gui import theme as T
+from gui.direct_panel import DirectPanel
 from utils.autostart import set_autostart
 from utils.files import resolve_mods_root
 
@@ -15,7 +16,7 @@ class SettingsDialog(ctk.CTkToplevel):
         node = app.node
         cfg = node.cfg
         self.title("Ustawienia – MX Sync")
-        self.geometry(f"560x620+{app.winfo_rootx() + 120}+{app.winfo_rooty() + 40}")
+        self.geometry(f"580x700+{app.winfo_rootx() + 120}+{app.winfo_rooty() + 40}")
         self.resizable(False, False)
         self.transient(app)
 
@@ -38,11 +39,14 @@ class SettingsDialog(ctk.CTkToplevel):
         lim.pack(fill="x", padx=16, pady=(12, 0))
         self.max_up = self._small(lim, "Limit wysyłania KB/s (0 = bez)", cfg.get("max_up", 0))
         self.max_down = self._small(lim, "Limit pobierania KB/s (0 = bez)", cfg.get("max_down", 0))
+        self.port = self._small(lim, "Port transferów (0 = auto)", cfg.get("lt_port", 0))
+        self.direct = DirectPanel(body, node)
+        self.direct.pack(fill="x", padx=16, pady=(16, 0))
 
         self.tray = ctk.CTkCheckBox(body, text="Krzyżyk chowa MX Sync do zasobnika (dalej udostępnia mody)",
                                     font=T.font(13), fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER,
                                     checkmark_color="#111111")
-        self.tray.pack(anchor="w", padx=16, pady=(18, 6))
+        self.tray.pack(anchor="w", padx=16, pady=(16, 6))
         if cfg.get("close_to_tray", True):
             self.tray.select()
         self.auto = ctk.CTkCheckBox(body, text="Uruchamiaj razem z Windows (od razu w zasobniku)",
@@ -101,10 +105,20 @@ class SettingsDialog(ctk.CTkToplevel):
         except ValueError:
             self.err.configure(text="Limity muszą być liczbami (0 = bez limitu)")
             return
+        try:
+            port = int(self.port.get() or 0)
+            if port and not 1024 <= port <= 65535:
+                raise ValueError
+        except ValueError:
+            self.err.configure(text="Port: 0 (automatycznie) albo liczba 1024–65535")
+            return
+        port_changed = port != int(self.app.node.cfg.get("lt_port") or 0)
         auto = bool(self.auto.get())
         set_autostart(auto)
         self.app.node.set_options(name=self.name.get().strip()[:32], folder=self.folder.get().strip(),
                                   password=self.password.get(), max_up=up, max_down=down,
-                                  close_to_tray=bool(self.tray.get()), autostart=auto)
-        self.app.toast("Zapisano ustawienia")
+                                  close_to_tray=bool(self.tray.get()), autostart=auto,
+                                  direct=self.direct.enabled, lt_port=port)
+        self.app.toast("Zapisano ustawienia – nowy port zadziała po ponownym uruchomieniu MX Sync"
+                       if port_changed else "Zapisano ustawienia")
         self.destroy()

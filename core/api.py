@@ -5,9 +5,9 @@ import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
-from core.protocol import HDR_AUTH, HDR_PROTO, HTTP_PORT, MAGIC, PROTO, make_proof
+from core.protocol import HDR_AUTH, HDR_ID, HDR_PROTO, HTTP_PORT, MAGIC, PROTO, make_proof
 
 
 class _Server(ThreadingHTTPServer):
@@ -77,9 +77,10 @@ def _handler(node):
                 self.close_connection = True
 
         def _route(self):
-            path = unquote(urlsplit(self.path).path)
-            if path == "/hello":
-                return self._json(node.hello())
+            url = urlsplit(self.path)
+            path = unquote(url.path)
+            if path == "/hello":            # publiczny adres tylko dla graczy z tym samym hasłem
+                return self._json(node.hello(trusted=self._authorized()))
             if path == "/show":
                 if self.client_address[0] != "127.0.0.1":
                     return self._json({"error": "?"}, 403)
@@ -96,6 +97,13 @@ def _handler(node):
                 if raw is None:
                     return self._json({"error": "brak"}, 404)
                 return self._send(200, raw, "application/x-bittorrent")
+            who = self.headers.get(HDR_ID, "")
+            if path == "/reach":
+                return self._json(node.direct.handle_reach(who))
+            if path == "/punch":
+                ihs = [ih for ih in parse_qs(url.query).get("ih", [""])[0].split(",")
+                       if re.fullmatch(r"[0-9a-f]{64}", ih)]
+                return self._json(node.direct.handle_punch(who, ihs))
             self._json({"error": "?"}, 404)
 
     return Handler

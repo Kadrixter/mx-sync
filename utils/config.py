@@ -20,6 +20,8 @@ DEFAULTS = {
     "manual_peers": [],         # gracze dodani ręcznie po IP (poza LAN / Radminem)
     "min_holders": 2,           # filtr „min. graczy z tym modem” na listach do pobrania
     "ignored_conflicts": {},    # pominięte różnice wersji: klucz modu -> infohash wersji gracza
+    "direct": True,             # połączenia bezpośrednie przez internet (UPnP, publiczne IP, hole punching)
+    "lt_port": 0,               # port transferów (0 = automatycznie od 50520)
 }
 
 

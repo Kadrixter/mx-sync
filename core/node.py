@@ -12,6 +12,7 @@ import uuid
 
 from core.api import ApiServer
 from core.compare import holders
+from core.direct import Direct
 from core.discovery import Beacon
 from core.engine import Engine
 from core.library import Library, save_path_for, torrent_ih
@@ -44,7 +45,9 @@ class Node:
         self.id = _node_id()
         self.nonce = secrets.token_hex(16)
         self.library = Library()
-        self.engine = Engine(on_finished=self._finished)
+        self.engine = Engine(on_finished=self._finished, port=int(self.cfg.get("lt_port") or 0),
+                             upnp=self.cfg.get("direct", True))
+        self.direct = Direct(self)
         self.api = ApiServer(self)
         self.players = Players(self.id, lambda: self.password, lambda: self.name,
                                on_change=self._players_changed)
@@ -77,8 +80,10 @@ class Node:
         return resolve_mods_root(f) if f else ""
 
     def set_options(self, **values):
-        old_folder = self.folder
+        old_folder, old_direct = self.folder, self.direct.enabled
         self.cfg = config.update(**values)
+        if self.direct.enabled != old_direct:
+            self.direct.toggled()
         if "max_up" in values or "max_down" in values:
             self.engine.set_limits(self.cfg["max_up"], self.cfg["max_down"])
         if "password" in values:
@@ -128,6 +133,7 @@ class Node:
             pass
         self.beacon.start()
         self.players.start()
+        self.direct.start()
         for entry in self.cfg["manual_peers"]:
             ip, port = parse_address(entry)
             self.players.add_manual(ip, port)
@@ -138,6 +144,7 @@ class Node:
         self._stop.set()
         self.library.stop()
         self.beacon.stop()
+        self.direct.stop()
         self.players.stop()
         self.api.stop()
         self.engine.close()
@@ -153,10 +160,12 @@ class Node:
             if now - last_connect > RECONNECT or self._reconnect.is_set():
                 self._reconnect.clear()
                 last_connect = now
+                active = [t for t in self.engine.active() if not t.done]
+                self.direct.observe(self.engine.peer_ips)
+                self.direct.punch(active)       # najpierw hole punching, potem adresy (Radmin po chwili)
                 peers = self._peers()
-                for t in self.engine.active():
-                    if not t.done:
-                        self.engine.connect(t.ih, peers)
+                for t in active:
+                    self.engine.connect(t.ih, peers)
             if now - last_scan > RESCAN and not self.library.scanning:
                 last_scan = now
                 self.rescan()
@@ -166,6 +175,7 @@ class Node:
 
     def _players_changed(self):
         self._reconnect.set()
+        self.direct.poke()          # nowy gracz – od razu sprawdź jego port
 
     def rescan(self, force=False):
         """force=True – sprawdzanie integralności: wszystkie mody liczone od nowa, bez pamięci."""
@@ -200,13 +210,13 @@ class Node:
             self.engine.seed(mod.ih, raw, save_path_for(path, raw))
             self._seeded[mod.key] = mod.ih
 
-    def hello(self):
+    def hello(self, trusted=False):
         mods = self.library.snapshot()
         return {"magic": MAGIC, "proto": PROTO, "id": self.id, "name": self.name, "version": VERSION,
                 "http": self.api.port, "port": self.api.port, "lt": self.engine.port,
                 "rev": self.library.rev, "mods": len(mods), "size": sum(m.size for m in mods.values()),
                 "protected": bool(self.password), "nonce": self.nonce,
-                "peers": self.players.known_addresses()}
+                "peers": self.players.known_addresses(), "wan": self.direct.wan() if trusted else None}
 
     def library_wire(self):
         return {"rev": self.library.rev, "mods": {k: m.to_wire() for k, m in self.library.snapshot().items()}}
@@ -218,7 +228,7 @@ class Node:
     # ---------- pobieranie ----------
 
     def _peers(self):
-        return [(p.ip, p.lt) for p in self.players.online() if p.lt]
+        return [ep for p in self.players.online() if p.lt for ep in self.direct.endpoints(p)]
 
     def download(self, mods):
         """Pobiera listę modów (Mod z biblioteki innego gracza) – od wszystkich, którzy je mają."""

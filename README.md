@@ -41,6 +41,14 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Moja biblioteka** – twoje mody, ilu graczy ma każdy z nich; folder modów wykrywany automatycznie
   (`Dokumenty\PiBoSo\MX Bikes\mods`), można zmienić w Ustawieniach.
 - **Transfery** – postęp, prędkość i od ilu graczy pobierasz; komu i jak szybko wysyłasz; ostatnio pobrane.
+- **Połączenie bezpośrednie (jak w qBittorrent)** – MX Sync sam otwiera port na routerze (UPnP / NAT-PMP),
+  sprawdza twoje publiczne IP i przekazuje je graczom z tym samym hasłem grupy. Gracze łączą się wtedy wprost przez
+  internet zamiast przez tunel Radmina; Radmin / LAN zostają jako zapas. Gdy port jest zamknięty u obu stron,
+  program próbuje hole punchingu (obaj gracze łączą się do siebie w tej samej chwili przez uTP). Inny gracz
+  sprawdza, czy twój port jest naprawdę otwarty. Wykrywa CGNAT / podwójny router. Port wystawiony do internetu
+  przyjmuje połączenia tylko od znanych graczy (filtr IP). W Ustawieniach: włącznik (domyślnie włączony), stan
+  portu, własny port i twoje publiczne IP (zasłonięte – cyfry widać po najechaniu). Port `50520` TCP+UDP można też
+  przekierować na routerze ręcznie.
 - **Zasobnik** – krzyżyk chowa MX Sync obok zegara (dalej udostępnia mody). Opcjonalnie start razem z Windows.
   Ponowne uruchomienie programu pokazuje już działające okno.
 - **Ustawienia** – nazwa gracza, folder modów, hasło grupy (widzicie się tylko z tym samym hasłem; hasło nie idzie

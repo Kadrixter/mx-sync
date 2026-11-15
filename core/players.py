@@ -11,7 +11,7 @@ from urllib.parse import quote
 import requests
 
 from core.library import Mod
-from core.protocol import HDR_AUTH, HDR_NAME, HDR_PROTO, PROTO, make_proof
+from core.protocol import HDR_AUTH, HDR_ID, HDR_NAME, HDR_PROTO, PROTO, make_proof
 from utils.netinfo import is_radmin_ip
 
 REFRESH = 4.0
@@ -37,6 +37,8 @@ class Player:
         self.manual = False
         self.gossip = False         # znany tylko z listy innego gracza (jeszcze niepotwierdzony)
         self.version = ""
+        self.wan = None             # [publiczne ip, port] – połączenia bezpośrednie (core/direct.py)
+        self.direct = False         # jest teraz połączenie bezpośrednie przez internet
 
     @property
     def online(self):
@@ -48,6 +50,8 @@ class Player:
             return ""
         if self.ip.startswith("127."):
             return "ten komputer"
+        if self.direct:
+            return "bezpośrednio"
         return "Radmin VPN" if is_radmin_ip(self.ip) else ("LAN" if not self.manual else "internet")
 
     def base(self):
@@ -136,7 +140,7 @@ class Players:
     # ---------- odświeżanie ----------
 
     def headers(self, p):
-        h = {HDR_PROTO: str(PROTO), HDR_NAME: quote(self.name_fn())}
+        h = {HDR_PROTO: str(PROTO), HDR_NAME: quote(self.name_fn()), HDR_ID: self.me_id}
         pw = self.password_fn()
         if pw and p.nonce:
             h[HDR_AUTH] = make_proof(pw, p.nonce)
@@ -157,7 +161,7 @@ class Players:
 
     def _refresh(self, p):
         try:
-            r = self._sess.get(p.base() + "/hello", timeout=(3, 6))
+            r = self._sess.get(p.base() + "/hello", headers=self.headers(p), timeout=(3, 6))
             info = r.json()
         except (requests.RequestException, ValueError):
             if p.gossip:
@@ -183,6 +187,7 @@ class Players:
         p.name = str(info.get("name") or p.name)[:32]
         p.lt, p.protected, p.nonce = int(info.get("lt") or 0), bool(info.get("protected")), info.get("nonce", "")
         p.mod_count, p.size, p.version = int(info.get("mods", 0)), int(info.get("size", 0)), info.get("version", "")
+        p.wan = _wan(info.get("wan"))
         p.last_seen = time.monotonic()
         if int(info.get("rev", -1)) != p.rev:
             self._load_library(p)
@@ -216,10 +221,24 @@ class Players:
         self._set(p, "online")
         self.on_change()
 
+    def request(self, p, path):
+        """Zapytanie z hasłem grupy i moim id (/reach, /punch)."""
+        return self._sess.get(p.base() + path, headers=self.headers(p), timeout=(3, 10))
+
     def fetch_torrent(self, p, ih):
         r = self._sess.get(f"{p.base()}/torrent/{ih}", headers=self.headers(p), timeout=(3, 20))
         r.raise_for_status()
         return r.content
+
+
+def _wan(value):
+    """["1.2.3.4", 50520] z /hello -> [ip, port] albo None (tylko poprawny publiczny adres)."""
+    from core.direct import is_public
+    try:
+        ip, port = str(value[0]), int(value[1])
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    return [ip, port] if is_public(ip) and 0 < port < 65536 else None
 
 
 def _better(new, old):
