@@ -27,7 +27,8 @@ BORDER = "#262930"
 FAINT = "#5d616b"
 
 # rodzaje modów: znaczek ASCII i kolor
-KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT), "Opony": ("o", "#c9ccd3"),
+KIND_STYLE = {"Mapa": ("#", ACCENT2), "Motor": (">", ACCENT),
+              "Malowanie": ("%", YELLOW), "Opony": ("o", "#c9ccd3"),
               "Kask": ("^", CYAN), "Strój": ("~", GREEN), "Rider": ("@", PURPLE), "Inne": ("*", MUTED)}
 
 

@@ -1,6 +1,7 @@
 """Budowanie wierszy listy modów: grupy (foldery z paczkami) na górze, pod nimi wszystkie mody
 w sekcjach według rodzaju. Wspólne dla porównania z graczem, brakujących modów i biblioteki."""
-from core.mods import KIND_GROUPS, KIND_PLURAL, group_parents, matches, mod_dir, mod_group, search_text
+from core.mods import (KIND_GROUPS, KIND_PLURAL, group_parents, matches, mod_dir, mod_group, mod_subtitle,
+                       search_text)
 from utils.fmt import fmt_size
 
 _TEXT = {}                      # klucz modu -> tekst do wyszukiwania (liczony raz)
@@ -54,7 +55,8 @@ def build_rows(mods, row_fn, checkable=True):
         rows.append({"header": True, "kind": kind, "selectable": checkable,
                      "label": f"{KIND_PLURAL[kind]}  ·  {len(g)}  ·  {fmt_size(sum(m.size for m in g))}"})
         for m in g:
-            r = {"id": m.ih, "kind": m.kind, "name": m.name, "path": mod_dir(m.key) or "mods", "size": m.size}
+            r = {"id": m.ih, "kind": m.kind, "name": m.name, "path": mod_subtitle(m.key, m.kind),
+                 "size": m.size}
             r.update(row_fn(m))
             rows.append(r)
     return rows

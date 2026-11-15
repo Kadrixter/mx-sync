@@ -19,14 +19,14 @@ PACKAGE_EXT = (".pkz", ".pkg", ".zip")
 # rodzaj modu z najgłębszego folderu-kategorii w ścieżce ('rider/helmets/X' -> Kask)
 CATEGORY_LABELS = {"tracks": "Mapa", "motocross": "Mapa", "supercross": "Mapa", "enduro": "Mapa",
                    "supermoto": "Mapa", "arenacross": "Mapa", "freestyle": "Mapa",
-                   "bikes": "Motor", "paints": "Motor", "sounds": "Motor", "models": "Motor",
+                   "bikes": "Motor", "paints": "Malowanie", "sounds": "Motor", "models": "Motor",
                    "tyres": "Opony",
                    "helmets": "Kask",
                    "boots": "Strój", "gloves": "Strój", "goggles": "Strój", "protections": "Strój",
                    "neckbraces": "Strój", "gear": "Strój", "skins": "Strój",
                    "rider": "Rider", "riders": "Rider", "bodies": "Rider",
                    "misc": "Inne"}
-KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Opony", "Opony"), ("Kask", "Kaski"),
+KIND_GROUPS = [("Mapa", "Mapy"), ("Motor", "Motory"), ("Malowanie", "Malowania"), ("Opony", "Opony"), ("Kask", "Kaski"),
                ("Strój", "Stroje"), ("Rider", "Ridery"), ("Inne", "Inne")]
 KIND_ORDER = {k: i for i, (k, _) in enumerate(KIND_GROUPS)}
 KIND_PLURAL = dict(KIND_GROUPS)
@@ -50,9 +50,31 @@ def mod_kind(key):
         # 'tracks/enduro' to mapa, ale 'bikes/enduro' to motor
         if kind == "Mapa" and p != "tracks" and first != "tracks":
             continue
+        # malowania motorów: 'bikes/<motor>/paints/x.pnt'; malowania kasków itp. zostają przy swoim rodzaju
+        if kind == "Malowanie" and first != "bikes":
+            continue
         if kind:
             return kind
     return "Inne"
+
+
+def paint_bike(key):
+    """Do jakiego motoru jest malowanie: folder nad 'paints' ('bikes/sm1oemktm450f/paints/x.pnt')."""
+    parts = key.split("/")
+    for i in range(len(parts) - 2, 0, -1):
+        if parts[i].lower() == "paints":
+            bike = parts[i - 1]
+            return None if bike.lower() in CATEGORY_DIRS else bike
+    return None
+
+
+def mod_subtitle(key, kind):
+    """Mały napis pod nazwą modu: przy malowaniu motor, przy reszcie folder."""
+    if kind == "Malowanie":
+        bike = paint_bike(key)
+        if bike:
+            return f"do motoru: {bike}"
+    return mod_dir(key) or "mods"
 
 
 def mod_name(key):

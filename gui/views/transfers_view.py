@@ -1,6 +1,7 @@
 """Transfery: co pobieram (postęp, prędkość, od ilu graczy) i komu wysyłam."""
 import customtkinter as ctk
 
+from core.mods import paint_bike
 from gui import theme as T
 from gui.widgets import AnimatedProgressBar
 from utils.fmt import fmt_eta, fmt_size, fmt_speed
@@ -18,6 +19,10 @@ class TransferRow(ctk.CTkFrame):
         top = ctk.CTkFrame(box, fg_color="transparent")
         top.pack(fill="x")
         ctk.CTkLabel(top, text=T.shorten(t.name, 60), font=T.font(14, "bold"), text_color=T.TEXT).pack(side="left")
+        bike = paint_bike(t.key) if t.kind == "Malowanie" else None
+        if bike:
+            ctk.CTkLabel(top, text=f"do motoru: {bike}", font=T.font(11), text_color=T.FAINT).pack(
+                side="left", padx=(8, 0))
         self.info = ctk.CTkLabel(top, text="", font=T.font(12), text_color=T.MUTED)
         self.info.pack(side="right")
         self.bar = AnimatedProgressBar(box, height=10, bg=T.ROW)

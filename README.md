@@ -19,6 +19,8 @@ Windows może pokazać „Nieznany wydawca” – kliknij „Więcej informacji 
 - **Zgodność modów** – przy każdym graczu kółko z procentem: ile modów macie identycznych (w tej samej wersji)
   względem wszystkich modów was obu. W szczegółach gracza zakładki: *Brakuje ci*, *Inna wersja*, *Wspólne*,
   *Tylko u ciebie*.
+- **Malowania** – osobny rodzaj obok motorów; pod nazwą małym drukiem motor, do którego jest malowanie
+  (folder nad `paints`, np. `bikes/sm1oemktm450f/paints/` -> `sm1oemktm450f`).
 - **Mody i grupy** – każdy plik `.pkz` to osobny mod. Folder z paczkami (np. `tracks/motocross/Paczka2024/`) to grupa:
   grupy są na górze listy, a zaznaczenie grupy zaznacza wszystkie jej mapy / mody. Folder z rozpakowanym modem
   (pliki `.ini`, `.hrc`, …) to jeden mod.
